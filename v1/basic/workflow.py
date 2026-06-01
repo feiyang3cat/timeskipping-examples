@@ -1,0 +1,59 @@
+import asyncio
+import logging
+
+from datetime import timedelta, datetime
+from temporalio import workflow, activity
+from uuid import uuid4
+from temporalio.common import RetryPolicy
+logger = logging.getLogger(__name__)
+
+default_retry_policy = RetryPolicy(
+    maximum_attempts=1
+)
+
+@activity.defn
+async def dummy_activity(name: str, activity_duration: timedelta = timedelta(seconds=0)):
+    await asyncio.sleep(activity_duration.total_seconds())
+    logger.info(f"Dummy activity completed for {name}")
+    return f"done {name}"
+
+@workflow.defn
+class WorkflowWithUserTimer:
+    @workflow.run
+    async def run(self, wait_hours: int = 1) -> str:
+        await workflow.execute_activity(
+            dummy_activity,
+            "preparation activity",
+            start_to_close_timeout=timedelta(seconds=1),
+            retry_policy=default_retry_policy,
+        )
+        await workflow.sleep(timedelta(hours=wait_hours))
+        await workflow.execute_activity(
+            dummy_activity,
+            "cleanup activity",
+            start_to_close_timeout=timedelta(seconds=1),
+            retry_policy=default_retry_policy,
+        )
+        return workflow.now().isoformat()
+
+@workflow.defn
+class ParentChildWorkflowWithUserTimer:
+    @workflow.run
+    async def run(self) -> str:
+        child_wf_1_id = f"child-wf-1-{workflow.uuid4()}"
+        child_wf_2_id = f"child-wf-2-{workflow.uuid4()}"
+        child_wf_1_handle = await workflow.start_child_workflow(
+            WorkflowWithUserTimer.run,
+            1,  # wait_hours
+            id=child_wf_1_id,
+        )
+        child_wf_2_handle = await workflow.start_child_workflow(
+            WorkflowWithUserTimer.run,
+            2,  # wait_hours
+            id=child_wf_2_id,
+        )
+        await asyncio.gather(
+            child_wf_1_handle,
+            child_wf_2_handle,
+        )
+        return workflow.now().isoformat()
