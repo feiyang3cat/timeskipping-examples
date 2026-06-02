@@ -57,3 +57,43 @@ class ParentChildWorkflowWithUserTimer:
             child_wf_2_handle,
         )
         return workflow.now().isoformat()
+
+
+# --- Activity-retry-backoff example -------------------------------------------
+# Records the (virtual) scheduled time of each attempt so a test can verify that
+# time-skipping fast-forwards the exponential retry backoff instead of waiting it
+# out in wall-clock time. The worker runs in the same process as the test, so the
+# test can read this list after the workflow completes.
+attempt_scheduled_times: list[datetime] = []
+
+
+@activity.defn
+async def flaky_activity() -> str:
+    info = activity.info()
+    attempt_scheduled_times.append(info.current_attempt_scheduled_time)
+    if info.attempt < 5:
+        raise RuntimeError(f"deliberate failure on attempt {info.attempt}")
+    return f"succeeded on attempt {info.attempt}"
+
+
+@workflow.defn
+class RetryingActivityWorkflow:
+    """Runs an activity that fails attempts 1-4 and succeeds on attempt 5.
+
+    The retry policy backs off 10s -> 20s -> 40s -> 80s between attempts; under
+    time-skipping those backoffs are skipped, so ~150s of virtual time passes in
+    near-zero wall-clock time.
+    """
+
+    @workflow.run
+    async def run(self) -> str:
+        return await workflow.execute_activity(
+            flaky_activity,
+            start_to_close_timeout=timedelta(seconds=10),
+            schedule_to_close_timeout=timedelta(days=365),
+            retry_policy=RetryPolicy(
+                initial_interval=timedelta(seconds=10),
+                backoff_coefficient=2.0,
+                maximum_attempts=5,
+            ),
+        )
