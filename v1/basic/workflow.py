@@ -1,22 +1,12 @@
 import asyncio
-import logging
-
 from datetime import timedelta
-from temporalio import workflow, activity
+
+from temporalio import workflow
 from temporalio.common import RetryPolicy
 
-logger = logging.getLogger(__name__)
+from activities import dummy_activity, retry_activity
 
 default_retry_policy = RetryPolicy(maximum_attempts=1)
-
-
-@activity.defn
-async def dummy_activity(
-    name: str, activity_duration: timedelta = timedelta(seconds=0)
-) -> str:
-    await asyncio.sleep(activity_duration.total_seconds())
-    logger.info(f"Dummy activity completed for {name}")
-    return f"done {name}"
 
 
 @workflow.defn
@@ -61,10 +51,6 @@ class ParentChildWorkflowWithUserTimer:
         )
         return workflow.now().isoformat()
 
-
-@activity.defn
-async def retry_activity() -> int:
-    return activity.info().attempt
 
 
 @workflow.defn

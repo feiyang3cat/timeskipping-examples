@@ -2,141 +2,101 @@ import asyncio
 from datetime import timedelta
 
 from temporalio import workflow
-from temporalio.exceptions import ApplicationError
 
-with workflow.unsafe.imports_passed_through():
-    from activities import (
-        GreetingInput,
-        GreetingOutput,
-        compose_greeting,
-        send_farewell,
-        slow_activity,
-    )
+from activities import dummy_activity
 
-
+# BEST PRACTICE OF SLEEP
 @workflow.defn
-class HelloTsWorkflow:
-    """Hello-world variant exercised by the time-skipping test server.
-
-    Includes a 1-hour durable timer between activities so we can prove the
-    test server fast-forwards through timers in milliseconds of wall time.
-    """
-
-    @workflow.run
-    async def run(self, name: str) -> str:
-        workflow.logger.info("HelloTsWorkflow started for %s", name)
-
-        greeting: GreetingOutput = await workflow.execute_activity(
-            compose_greeting,
-            GreetingInput(name=name),
-            start_to_close_timeout=timedelta(seconds=30),
-        )
-
-        await asyncio.sleep(timedelta(hours=1).total_seconds())
-
-        farewell: GreetingOutput = await workflow.execute_activity(
-            send_farewell,
-            GreetingInput(name=name),
-            start_to_close_timeout=timedelta(seconds=30),
-        )
-
-        return f"{greeting.message} ... {farewell.message}"
-
-
-@workflow.defn
-class TwoTimerWorkflow:
-    """Runs two concurrent timers (1h and 10h) and exposes which have fired."""
+class WorkflowNeedInteraction:
+    """A workflow waiting on a signal-driven condition."""
 
     def __init__(self) -> None:
-        self._short_fired = False
-        self._long_fired = False
-
-    @workflow.run
-    async def run(self) -> None:
-        async def short_timer() -> None:
-            await asyncio.sleep(timedelta(hours=1).total_seconds())
-            self._short_fired = True
-
-        async def long_timer() -> None:
-            await asyncio.sleep(timedelta(hours=10).total_seconds())
-            self._long_fired = True
-
-        await asyncio.gather(short_timer(), long_timer())
-
-    @workflow.query
-    def short_fired(self) -> bool:
-        return self._short_fired
-
-    @workflow.query
-    def long_fired(self) -> bool:
-        return self._long_fired
-
-
-@workflow.defn
-class WaitForSignalWorkflow:
-    """Blocks until `go` is signaled, then returns."""
-
-    def __init__(self) -> None:
-        self._signaled = False
+        self._signal_count = 0
 
     @workflow.run
     async def run(self) -> str:
-        await workflow.wait_condition(lambda: self._signaled)
-        return "signaled"
+        await workflow.wait_condition(lambda: self._signal_count >= 1)
+        return workflow.now().isoformat()
 
     @workflow.signal
     def go(self) -> None:
-        self._signaled = True
+        self._signal_count += 1
+
+@workflow.defn
+class WorkflowNeedHasTimerAndInteraction:
+    """Race a 1h timer against a `go` signal after an initial 1h sleep.
+
+    Returns True if the signal arrived within 1 minute after the sleep, False otherwise.
+    """
+
+    def __init__(self) -> None:
+        self._prepared = False
+        self._ready = False
+
+    @workflow.signal
+    def go(self) -> None:
+        if self._prepared:
+            self._ready = True
+
+    @workflow.run
+    async def run(self) -> bool:
+        await workflow.execute_activity(
+            dummy_activity,
+            "some prep activity",
+            start_to_close_timeout=timedelta(seconds=60),
+        )
+        self._prepared = True
+        await workflow.sleep(timedelta(hours=1))
+        try:
+            await workflow.wait_condition(
+                lambda: self._ready, timeout=timedelta(minutes=1)
+            )
+        except asyncio.TimeoutError:
+            pass
+        return self._ready
 
 
 @workflow.defn
-class FailFirstAttemptWorkflow:
-    """Fails on attempt 1, succeeds on later attempts."""
+class ThisWorkflowRunsWithCronOrRetry:
+    """A short workflow run — 30s timer then records completion — used as a cron body.
+
+    Note: the test server uses UNIX 5-field cron (minute granularity is the floor),
+    so the original 1s/500ms/3s scenario is scaled up 60× to 1min/30s/3min.
+    """
+    @workflow.run
+    async def run(self):
+        await workflow.execute_activity(
+            dummy_activity,
+            "routine activity for cron",
+            start_to_close_timeout=timedelta(seconds=10),
+        )
+
+
+# ANTI-PATTERNS:
+@workflow.defn
+class BusyWorkflow:
+    """Don't use sleep."""
+    """A busy workflow with no waiting point — time-skipping has nothing to skip."""
+    """In v1, sleep will wait until the testing server time passes to the sleep point."""
+    """But in v2, time is per-execution; sleep may return an error when the execution (not a single run) completes and time hasn't reached the sleep point."""
+
+    @workflow.run
+    async def run(self, seconds_each: float) -> str:
+        for _ in range(3):
+            await workflow.execute_activity(
+                dummy_activity,
+                "busy_workflow_activity",
+                start_to_close_timeout=timedelta(seconds=60),
+            )
+        return workflow.now().isoformat()
+
+@workflow.defn
+class WaitingWorkflowOnUserTimer:
+    """Don't use sleep."""
+    """Just enable time skipping and let it run to completion."""
 
     @workflow.run
     async def run(self) -> str:
-        attempt = workflow.info().attempt
-        if attempt == 1:
-            raise ApplicationError("first attempt fails")
-        return f"succeeded on attempt {attempt}"
+        await workflow.sleep(timedelta(days=10))
+        return "done"
 
-
-@workflow.defn
-class SlowActivityWorkflow:
-    """Runs `slow_activity` for a caller-supplied duration and returns its result."""
-
-    @workflow.run
-    async def run(self, seconds: float) -> str:
-        return await workflow.execute_activity(
-            slow_activity,
-            seconds,
-            start_to_close_timeout=timedelta(seconds=60),
-        )
-
-
-@workflow.defn
-class HelloLocalWorkflow:
-    """Hello-world variant exercised by the full local dev server.
-
-    Assumed to depend on a server feature the in-memory time-skipping test
-    server doesn't implement (e.g. advanced visibility, schedules, search
-    attributes), so its tests must boot a real Temporal server.
-    """
-
-    @workflow.run
-    async def run(self, name: str) -> str:
-        workflow.logger.info("HelloLocalWorkflow started for %s", name)
-
-        greeting: GreetingOutput = await workflow.execute_activity(
-            compose_greeting,
-            GreetingInput(name=name),
-            start_to_close_timeout=timedelta(seconds=30),
-        )
-
-        farewell: GreetingOutput = await workflow.execute_activity(
-            send_farewell,
-            GreetingInput(name=name),
-            start_to_close_timeout=timedelta(seconds=30),
-        )
-
-        return f"{greeting.message} ... {farewell.message}"

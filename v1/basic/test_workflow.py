@@ -16,10 +16,10 @@ from temporalio.testing import WorkflowEnvironment
 from datetime import timedelta, datetime
 from temporalio import activity
 
+from activities import dummy_activity
 from basic.workflow import (
     WorkflowWithUserTimer,
     ParentChildWorkflowWithUserTimer,
-    dummy_activity,
     WorkflowWithActivityRetires,
 )
 

@@ -7,22 +7,6 @@ with workflow.unsafe.imports_passed_through():
     from activities import record_completion
 
 
-@workflow.defn
-class PendingOnSignalsWorkflow:
-    """A workflow that is pending on 2 signals to finish.
-    """
-    def __init__(self) -> None:
-        self._signal_count = 0
-
-    @workflow.run
-    async def run(self) -> str:
-        await workflow.wait_condition(lambda: self._signal_count == 2)
-        return "done"
-
-    @workflow.signal
-    def go(self) -> None:
-        self._signal_count += 1
-
 
 @workflow.defn
 class CronTimerWorkflow:
