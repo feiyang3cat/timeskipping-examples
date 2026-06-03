@@ -1,19 +1,30 @@
+This repo contains examples of time-skipping best practices in testing, along with anti-patterns to avoid.
 
-This repo shares examples of time skipping best practice in testing, and also the anti-patterns that should be avoided.
+## Testing features/scenarios
 
-## Testing scenarios and examples
+1. Skip user timers in *workflows*
+2. Test retry backoff and retry policies for *workflows*
+3. Test workflow execution and run timeouts
+4. Test retry backoff and retry policies for *activities*
+5. Test retry backoffs and start delays for *standalone activities (SAA)*
+6. Test waiting time for *crons* and *schedulers*
+7. Set a duration for `env.sleep()` to pause time-skipping after some time. This is useful for:
+    - Sleep with schedulers
+    - Sleep with retries and cron
+    - Sleep for interactions: single workflow, workflow with child workflows
 
-- Skip user timers in testing *workflows*
-- Testing workflow execution and run timeout
-- Testing retry backoff and help test retry policy for  *workflows* and *activities*
-- Testing retry backoffs and start delays for *standalone activities (SAA)*
-- Testing waiting time for *crons* and *schedulers*
-- The users can set a user-specified duration for one execution (e.g.`sleep(1hour)`) and pause time-skipping when virtual time reaching the end point of the sleep. This control is helpful in a bunch of different scenarios:
-    - sleep for one 1hour to check how many runs the execution with a cron/retry policy has run in 1hour
-    - sleep stops time skipping in the middle of a workflow so that users can interact with the workflow via signals, updates, and queries — rather than letting time-skipping run the workflow to completion uninterrupted
+## Examples
 
-## the sleep method: best practice and anti-patterns
+| # | Feature | Example | v1 | v2 |
+|---|---------|---------|----|----|
+| 1 | User Timers | [v1/basic/test_workflow.py](v1/basic/test_workflow.py) | ✅ | — |
+| 2 | Workflow Retry | | — | — |
+| 3 | Workflow Execution/Run Timeouts | | — | — |
+| 4 | Activity Retry| [v1/basic/test_workflow.py](v1/basic/test_workflow.py) | ✅ | — |
+| 5 | SAA | | ❌ | - |
+| 6 | Cron | | — | — |
+| 6 | Scheduler | | ❌ | — |
+| 7 | TimeSkipping Sleep| [v1/sleep/test_workflow.py](v1/sleep/test_workflow.py) | — | — |
 
-- sleep with schedulers
-- sleep with retries and cron
-- sleep for interactions: single workflow, workflow with child workflows
+> ✅ example exists · — coming soon · ❌ not supported
+

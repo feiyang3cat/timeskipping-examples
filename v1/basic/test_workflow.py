@@ -17,10 +17,10 @@ from datetime import timedelta, datetime
 from temporalio import activity
 
 from activities import dummy_activity
-from basic.workflow import (
+from workflow import (
     WorkflowWithUserTimer,
     ParentChildWorkflowWithUserTimer,
-    WorkflowWithActivityRetires,
+    WorkflowWithActivityRetries,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,13 +94,13 @@ async def test_time_skipping_activity_retry_backoff(ts_env: WorkflowEnvironment)
     worker = Worker(
         client,
         task_queue=task_queue,
-        workflows=[WorkflowWithActivityRetires],
+        workflows=[WorkflowWithActivityRetries],
         activities=[retry_activity_mocked],
     )
     async with worker:
         time_start = await ts_env.get_current_time()
         handle = await client.start_workflow(
-            WorkflowWithActivityRetires.run,
+            WorkflowWithActivityRetries.run,
             id=f"wf-{uuid4()}",
             task_queue=task_queue,
         )
