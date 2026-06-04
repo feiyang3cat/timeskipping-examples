@@ -3,9 +3,9 @@ Time-skipping examples (v1) across supported scenarios:
 1. User timers (single workflow, parent-child)
 2. Workflow retry backoff
 3. Workflow run timeout
-4. Activity retry backoff
-6. Cron waiting time
-7. env.sleep() to pause time-skipping mid-execution
+5. Activity retry backoff
+7. Cron waiting time
+8. env.sleep() to pause time-skipping mid-execution
 """
 
 import logging
@@ -23,11 +23,15 @@ from temporalio.worker import Worker
 
 from activities import dummy_activity
 from workflow import (
+    ChildWorkflowWaitingForSignal,
     FailFirstAttemptWorkflow,
     ParentChildWorkflowWithUserTimer,
+    ParentWorkflowWithChildInteraction,
     ThisWorkflowRunsWithCronOrRetry,
     TwoTimerWorkflow,
     WaitForSignalWorkflow,
+    WorkflowNeedHasTimerAndInteraction,
+    WorkflowNeedInteraction,
     WorkflowWithActivityRetries,
     WorkflowWithUserTimer,
 )
@@ -110,7 +114,7 @@ async def test_workflow_retry_backoff(ts_env: WorkflowEnvironment):
     assert result == "succeeded on attempt 2"
 
 
-# --- Scenario 3: Workflow Run Timeout ---
+# --- Scenario 3: Workflow Execution/Run Timeout ---
 
 async def test_workflow_times_out_after_run_timeout(ts_env: WorkflowEnvironment):
     task_queue = f"tq-run-timeout-{uuid4()}"
@@ -127,7 +131,22 @@ async def test_workflow_times_out_after_run_timeout(ts_env: WorkflowEnvironment)
     assert isinstance(exc_info.value.cause, TemporalTimeoutError)
 
 
-# --- Scenario 4: Activity Retry ---
+async def test_workflow_times_out_after_execution_timeout(ts_env: WorkflowEnvironment):
+    task_queue = f"tq-execution-timeout-{uuid4()}"
+    async with Worker(ts_env.client, task_queue=task_queue, workflows=[WaitForSignalWorkflow]):
+        handle = await ts_env.client.start_workflow(
+            WaitForSignalWorkflow.run,
+            id=f"wf-{uuid4()}",
+            task_queue=task_queue,
+            execution_timeout=timedelta(hours=1),
+        )
+        await ts_env.sleep(2 * 60 * 60)
+        with pytest.raises(WorkflowFailureError) as exc_info:
+            await handle.result()
+    assert isinstance(exc_info.value.cause, TemporalTimeoutError)
+
+
+# --- Scenario 5: Activity Retry ---
 
 @activity.defn(name="retry_activity")
 async def retry_activity_mocked() -> int:
@@ -160,7 +179,7 @@ async def test_time_skipping_activity_retry_backoff(ts_env: WorkflowEnvironment)
         assert delta > timedelta(hours=1)
 
 
-# --- Scenario 6: Cron ---
+# --- Scenario 7: Cron ---
 
 async def test_cron_runs_on_schedule(ts_env: WorkflowEnvironment):
     workflow_id = f"cron-wf-{uuid4()}"
@@ -190,7 +209,7 @@ async def test_cron_runs_on_schedule(ts_env: WorkflowEnvironment):
     logger.info("Cron completed %d runs: %s", len(runs), [t.isoformat() for t in start_times])
 
 
-# --- Scenario 7: env.sleep() ---
+# --- Scenario 8: TimeSkipping Sleep ---
 
 async def test_partial_clock_advance_fires_only_short_timer(ts_env: WorkflowEnvironment):
     task_queue = f"tq-two-timer-{uuid4()}"
@@ -210,3 +229,60 @@ async def test_partial_clock_advance_fires_only_short_timer(ts_env: WorkflowEnvi
         logger.info("After 3h advance: short_fired=%s, long_fired=%s", short_fired, long_fired)
 
         await handle.cancel()
+
+
+async def test_env_sleep_then_signal_beats_timer(ts_env: WorkflowEnvironment):
+    task_queue = f"tq-interaction-{uuid4()}"
+    async with Worker(
+        ts_env.client,
+        task_queue=task_queue,
+        workflows=[WorkflowNeedHasTimerAndInteraction],
+        activities=[dummy_activity],
+    ):
+        handle = await ts_env.client.start_workflow(
+            WorkflowNeedHasTimerAndInteraction.run,
+            id=f"wf-{uuid4()}",
+            task_queue=task_queue,
+        )
+        # Advance past the 1h sleep so the workflow reaches wait_condition.
+        await ts_env.sleep(timedelta(hours=1).total_seconds())
+        await handle.signal(WorkflowNeedHasTimerAndInteraction.go)
+        result = await handle.result()
+
+    assert result is True  # signal arrived within 1 minute window
+
+
+async def test_env_sleep_steps_through_parent_child_interaction(ts_env: WorkflowEnvironment):
+    task_queue = f"tq-parent-child-interaction-{uuid4()}"
+    parent_id = f"parent-{uuid4()}"
+    child_id = f"child-{parent_id}"
+
+    async with Worker(
+        ts_env.client,
+        task_queue=task_queue,
+        workflows=[ParentWorkflowWithChildInteraction, ChildWorkflowWaitingForSignal],
+        activities=[dummy_activity],
+    ):
+        handle = await ts_env.client.start_workflow(
+            ParentWorkflowWithChildInteraction.run,
+            child_id,
+            id=parent_id,
+            task_queue=task_queue,
+        )
+
+        # Step 1: advance past parent's 1h sleep so the child is started.
+        await ts_env.sleep(timedelta(hours=1, minutes=10).total_seconds())
+        # Step 2: signal child — beats its 5min timer after the 30min sleep.
+        await ts_env.client.get_workflow_handle(child_id).signal(
+            ChildWorkflowWaitingForSignal.go
+        )
+        # Step 3: advance past parent's second 1h sleep.
+        await ts_env.sleep(timedelta(hours=1).total_seconds())
+        # Step 4: signal parent — beats its 5min timer.
+        await handle.signal(ParentWorkflowWithChildInteraction.go)
+
+        result = await handle.result()
+
+    assert result.parent_signal_won is True
+    assert result.child_signal_won is True
+    logger.info("Parent-child interaction complete: %s", result)
