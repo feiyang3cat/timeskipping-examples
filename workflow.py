@@ -57,15 +57,7 @@ class ParentChildWorkflowWithUserTimer:
 
 
 # --- Scenario 2: Workflow Retry ---
-
-@workflow.defn
-class FailFirstAttemptWorkflow:
-    @workflow.run
-    async def run(self) -> str:
-        if workflow.info().attempt == 1:
-            raise ApplicationError("first attempt fails")
-        return f"succeeded on attempt {workflow.info().attempt}"
-
+# (uses ThisWorkflowRunsWithCronOrRetry from Scenario 6 with a mocked failing activity)
 
 # --- Scenario 3: Workflow Execution/Run Timeouts ---
 
@@ -84,7 +76,13 @@ class WaitForSignalWorkflow:
         self._signaled = True
 
 
-# --- Scenario 4: Workflow Start Delay --- (coming soon)
+# --- Scenario 4: Workflow Start Delay ---
+
+@workflow.defn
+class WorkflowWithStartDelay:
+    @workflow.run
+    async def run(self) -> str:
+        return workflow.now().isoformat()
 
 
 # --- Scenario 5: Activity Retry ---
@@ -92,8 +90,8 @@ class WaitForSignalWorkflow:
 @workflow.defn
 class WorkflowWithActivityRetries:
     @workflow.run
-    async def run(self) -> int:
-        return await workflow.execute_activity(
+    async def run(self) -> str:
+        await workflow.execute_activity(
             retry_activity,
             start_to_close_timeout=timedelta(seconds=10),
             retry_policy=RetryPolicy(
@@ -102,6 +100,7 @@ class WorkflowWithActivityRetries:
                 maximum_attempts=3,
             ),
         )
+        return workflow.now().isoformat()
 
 
 # --- Scenario 6: Cron ---
@@ -128,166 +127,122 @@ class ThisWorkflowRunsWithCronOrRetry:
 # --- Scenario 8: SAA --- (not supported in v1)
 
 # --- Scenario 9: TimeSkipping Sleep ---
-
 @workflow.defn
-class WorkflowNeedInteraction:
-    """Waits on a signal-driven condition — use env.sleep() to pause time-skipping,
-    then send the signal before the timeout fires."""
-
-    def __init__(self) -> None:
-        self._signal_count = 0
-
-    @workflow.run
-    async def run(self) -> str:
-        await workflow.wait_condition(lambda: self._signal_count >= 1)
-        return workflow.now().isoformat()
-
-    @workflow.signal
-    def go(self) -> None:
-        self._signal_count += 1
-
-
-@workflow.defn
-class WorkflowNeedHasTimerAndInteraction:
-    """Races a 1h timer against a `go` signal after an initial 1h sleep.
-
-    Returns True if the signal arrived within 1 minute after the sleep, False otherwise.
-    """
+class WorkflowWaitingForSignals:
+    _waiting_timeout = timedelta(minutes=10)
 
     def __init__(self) -> None:
         self._prepared = False
-        self._ready = False
-
-    @workflow.signal
-    def go(self) -> None:
-        if self._prepared:
-            self._ready = True
-
-    @workflow.run
-    async def run(self) -> bool:
-        await workflow.execute_activity(
-            dummy_activity,
-            "some prep activity",
-            start_to_close_timeout=timedelta(seconds=60),
-        )
-        self._prepared = True
-        await workflow.sleep(timedelta(hours=1))
-        try:
-            await workflow.wait_condition(
-                lambda: self._ready, timeout=timedelta(minutes=1)
-            )
-        except asyncio.TimeoutError:
-            pass
-        return self._ready
-
-
-@workflow.defn
-class TwoTimerWorkflow:
-    """Two concurrent timers (1h and 10h) — used to test partial clock advances."""
-
-    def __init__(self) -> None:
-        self._short_fired = False
-        self._long_fired = False
-
-    @workflow.run
-    async def run(self) -> None:
-        async def short_timer() -> None:
-            await workflow.sleep(timedelta(hours=1))
-            self._short_fired = True
-
-        async def long_timer() -> None:
-            await workflow.sleep(timedelta(hours=10))
-            self._long_fired = True
-
-        await asyncio.gather(short_timer(), long_timer())
-
-    @workflow.query
-    def short_fired(self) -> bool:
-        return self._short_fired
-
-    @workflow.query
-    def long_fired(self) -> bool:
-        return self._long_fired
-
-
-@dataclass
-class ParentChildResult:
-    end: str
-    parent_signal_won: bool
-    child_signal_won: bool
-
-
-@workflow.defn
-class ChildWorkflowWaitingForSignal:
-    """Child workflow: sleeps 30min, then races a 5min timer against a `go` signal."""
-
-    APPROVAL_TIMEOUT = timedelta(minutes=5)
-
-    def __init__(self) -> None:
         self._signaled = False
 
     @workflow.signal
     def go(self) -> None:
+        if self._prepared:
+            self._signaled = True
+
+    @workflow.signal
+    def prepare_done(self) -> None:
+        self._prepared = True
+
+    @workflow.run
+    async def run(self) -> bool:
+        await workflow.sleep(timedelta(hours=1))
+        try:
+            await workflow.wait_condition(
+                lambda: self._signaled, timeout=self._waiting_timeout
+            )
+            return True
+        except asyncio.TimeoutError:
+            return False
+
+# --- Scenario 9+: complicated examples for sleep ---
+
+@workflow.defn
+class ChildA:
+    @workflow.run
+    async def run(self) -> str:
+        await workflow.sleep(timedelta(hours=1))
+        return workflow.now().isoformat()
+
+
+@workflow.defn
+class ChildB:
+    @workflow.run
+    async def run(self) -> str:
+        await workflow.sleep(timedelta(hours=2))
+        return workflow.now().isoformat()
+
+
+@workflow.defn
+class ParentWithTwoChildren:
+    def __init__(self) -> None:
+        self._approved = False
+
+    @workflow.signal
+    def approve(self) -> None:
+        self._approved = True
+
+    @workflow.run
+    async def run(self) -> bool:
+        parent_id = workflow.info().workflow_id
+        handle_a, handle_b = await asyncio.gather(
+            workflow.start_child_workflow(ChildA.run, id=f"{parent_id}-a"),
+            workflow.start_child_workflow(ChildB.run, id=f"{parent_id}-b"),
+        )
+        # ChildA finishes at +1h, ChildB at +2h; parent unblocks at +2h
+        await asyncio.gather(handle_a, handle_b)
+        # Additional 1h cooldown before opening the approval window (+3h total)
+        await workflow.sleep(timedelta(hours=1))
+        try:
+            await workflow.wait_condition(lambda: self._approved, timeout=timedelta(hours=1))
+        except asyncio.TimeoutError:
+            pass
+        return self._approved
+
+
+@workflow.defn
+class ChildWithCondition:
+    def __init__(self) -> None:
+        self._signaled = False
+
+    @workflow.signal
+    def proceed(self) -> None:
         self._signaled = True
 
     @workflow.run
     async def run(self) -> bool:
         await workflow.sleep(timedelta(minutes=30))
         try:
-            await workflow.wait_condition(
-                lambda: self._signaled, timeout=self.APPROVAL_TIMEOUT
-            )
-            return True
+            await workflow.wait_condition(lambda: self._signaled, timeout=timedelta(minutes=5))
         except asyncio.TimeoutError:
-            return False
+            pass
+        return self._signaled
 
 
 @workflow.defn
-class ParentWorkflowWithChildInteraction:
-    """Parent: sleeps 1h → starts child → sleeps 1h → races 5min timer vs signal.
-
-    Used to demonstrate env.sleep() stepping through a multi-workflow interaction.
-    """
-
-    APPROVAL_TIMEOUT = timedelta(minutes=5)
-
+class ParentChildBothWaitOnCondition:
     def __init__(self) -> None:
         self._signaled = False
 
     @workflow.signal
-    def go(self) -> None:
+    def proceed(self) -> None:
         self._signaled = True
 
     @workflow.run
-    async def run(self, child_id: str) -> ParentChildResult:
-        await workflow.execute_activity(
-            dummy_activity,
-            "sending a notification",
-            start_to_close_timeout=timedelta(seconds=5),
-        )
+    async def run(self) -> tuple[bool, bool]:
         await workflow.sleep(timedelta(hours=1))
-
-        child_signal_won = await workflow.execute_child_workflow(
-            ChildWorkflowWaitingForSignal.run,
+        # Child ID is deterministic so the caller can build a handle from the DB-stored parent ID
+        child_id = f"{workflow.info().workflow_id}-child"
+        child_signaled = await workflow.execute_child_workflow(
+            ChildWithCondition.run,
             id=child_id,
-            task_queue=workflow.info().task_queue,
         )
-
         await workflow.sleep(timedelta(hours=1))
-
         try:
-            await workflow.wait_condition(
-                lambda: self._signaled, timeout=self.APPROVAL_TIMEOUT
-            )
-            parent_signal_won = True
+            await workflow.wait_condition(lambda: self._signaled, timeout=timedelta(minutes=5))
         except asyncio.TimeoutError:
-            parent_signal_won = False
-
-        return ParentChildResult(
-            end=workflow.now().isoformat(),
-            parent_signal_won=parent_signal_won,
-            child_signal_won=child_signal_won,
-        )
+            pass
+        return child_signaled, self._signaled
 
 
 # --- Anti-patterns ---

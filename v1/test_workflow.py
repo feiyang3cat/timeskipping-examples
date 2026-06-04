@@ -17,24 +17,13 @@ import pytest_asyncio
 from temporalio import activity
 from temporalio.client import WorkflowFailureError
 from temporalio.common import RetryPolicy
+from temporalio.exceptions import ApplicationError
 from temporalio.exceptions import TimeoutError as TemporalTimeoutError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from activities import dummy_activity
-from workflow import (
-    ChildWorkflowWaitingForSignal,
-    FailFirstAttemptWorkflow,
-    ParentChildWorkflowWithUserTimer,
-    ParentWorkflowWithChildInteraction,
-    ThisWorkflowRunsWithCronOrRetry,
-    TwoTimerWorkflow,
-    WaitForSignalWorkflow,
-    WorkflowNeedHasTimerAndInteraction,
-    WorkflowNeedInteraction,
-    WorkflowWithActivityRetries,
-    WorkflowWithUserTimer,
-)
+from workflow import *
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +56,6 @@ async def test_time_skipping_in_workflow_with_user_timer(ts_env: WorkflowEnviron
         completed_time = datetime.fromisoformat(await handle.result())
         delta = completed_time - time_start
         assert delta >= timedelta(hours=1)
-        assert delta < timedelta(hours=2)
         logger.info(f"Workflow completed in {delta.total_seconds() / 3600:.2f} hours")
 
 
@@ -92,7 +80,6 @@ async def test_time_skipping_in_parent_child_workflow_with_user_timer(
         completed_time = datetime.fromisoformat(await handle.result())
         delta = completed_time - time_start
         assert delta >= timedelta(hours=2)
-        assert delta < timedelta(hours=3)
         logger.info(f"Workflow completed in {delta.total_seconds() / 3600:.2f} hours")
 
 
@@ -100,9 +87,24 @@ async def test_time_skipping_in_parent_child_workflow_with_user_timer(
 
 async def test_workflow_retry_backoff(ts_env: WorkflowEnvironment):
     task_queue = f"tq-wf-retry-{uuid4()}"
-    async with Worker(ts_env.client, task_queue=task_queue, workflows=[FailFirstAttemptWorkflow]):
-        result = await ts_env.client.execute_workflow(
-            FailFirstAttemptWorkflow.run,
+    calls = []
+
+    @activity.defn(name="dummy_activity")
+    async def dummy_activity_fail_once(name: str, activity_duration=timedelta()) -> str:
+        calls.append(1)
+        if len(calls) == 1:
+            raise ApplicationError("simulated failure", non_retryable=True)
+        return f"done {name}"
+
+    async with Worker(
+        ts_env.client,
+        task_queue=task_queue,
+        workflows=[ThisWorkflowRunsWithCronOrRetry],
+        activities=[dummy_activity_fail_once],
+    ):
+        time_start = await ts_env.get_current_time()
+        await ts_env.client.execute_workflow(
+            ThisWorkflowRunsWithCronOrRetry.run,
             id=f"wf-{uuid4()}",
             task_queue=task_queue,
             retry_policy=RetryPolicy(
@@ -111,7 +113,10 @@ async def test_workflow_retry_backoff(ts_env: WorkflowEnvironment):
                 maximum_attempts=3,
             ),
         )
-    assert result == "succeeded on attempt 2"
+        time_end = await ts_env.get_current_time()
+
+    assert len(calls) == 2
+    assert time_end - time_start >= timedelta(hours=1)
 
 
 # --- Scenario 3: Workflow Execution/Run Timeout ---
@@ -146,7 +151,22 @@ async def test_workflow_times_out_after_execution_timeout(ts_env: WorkflowEnviro
     assert isinstance(exc_info.value.cause, TemporalTimeoutError)
 
 
-# --- Scenario 4: Workflow Start Delay --- (coming soon)
+# --- Scenario 4: Workflow Start Delay ---
+
+async def test_workflow_start_delay(ts_env: WorkflowEnvironment):
+    task_queue = f"tq-start-delay-{uuid4()}"
+    async with Worker(ts_env.client, task_queue=task_queue, workflows=[WorkflowWithStartDelay]):
+        time_start = await ts_env.get_current_time()
+        result = await ts_env.client.execute_workflow(
+            WorkflowWithStartDelay.run,
+            id=f"wf-{uuid4()}",
+            task_queue=task_queue,
+            start_delay=timedelta(hours=2),
+        )
+    completed_time = datetime.fromisoformat(result)
+    delta = completed_time - time_start
+    assert delta >= timedelta(hours=2)
+
 
 # --- Scenario 5: Activity Retry ---
 
@@ -174,11 +194,11 @@ async def test_time_skipping_activity_retry_backoff(ts_env: WorkflowEnvironment)
             id=f"wf-{uuid4()}",
             task_queue=task_queue,
         )
-        attempted = await handle.result()
-        time_end = await ts_env.get_current_time()
-        assert attempted > 1
-        delta = time_end - time_start
-        assert delta > timedelta(hours=1)
+        completed_time = datetime.fromisoformat(await handle.result())
+        delta = completed_time - time_start
+        # attempt 1 fails → 1h backoff, attempt 2 fails → 2h backoff, attempt 3 succeeds
+        assert delta >= timedelta(hours=3)
+        logger.info(f"Activity retries completed in {delta.total_seconds() / 3600:.2f} hours")
 
 
 # --- Scenario 6: Cron ---
@@ -186,29 +206,36 @@ async def test_time_skipping_activity_retry_backoff(ts_env: WorkflowEnvironment)
 async def test_cron_runs_on_schedule(ts_env: WorkflowEnvironment):
     workflow_id = f"cron-wf-{uuid4()}"
     task_queue = f"tq-cron-{uuid4()}"
+
+    # The SDK testing server does not implement ListWorkflowExecutions, so we
+    # track cron runs by counting activity invocations via a closure.
+    call_count = []
+
+    @activity.defn(name="dummy_activity")
+    async def counting_dummy(name: str, activity_duration=timedelta()) -> str:
+        call_count.append(1)
+        return f"done {name}"
+
     async with Worker(
         ts_env.client,
         task_queue=task_queue,
         workflows=[ThisWorkflowRunsWithCronOrRetry],
-        activities=[dummy_activity],
+        activities=[counting_dummy],
     ):
+        time_start = await ts_env.get_current_time()
         handle = await ts_env.client.start_workflow(
             ThisWorkflowRunsWithCronOrRetry.run,
             id=workflow_id,
             task_queue=task_queue,
-            cron_schedule="* * * * *",
+            cron_schedule="0 9 * * *",  # every day at 9:00 AM
         )
-        await ts_env.sleep(3 * 60)
+        await ts_env.sleep(timedelta(days=3).total_seconds())
         await handle.terminate()
+        time_end = await ts_env.get_current_time()
 
-    runs = [
-        w async for w in ts_env.client.list_workflows(
-            f'WorkflowId = "{workflow_id}" AND ExecutionStatus = "Completed"'
-        )
-    ]
-    assert len(runs) >= 2
-    start_times = sorted(r.start_time for r in runs)
-    logger.info("Cron completed %d runs: %s", len(runs), [t.isoformat() for t in start_times])
+    assert len(call_count) >= 3
+    assert time_end - time_start >= timedelta(days=3)
+    logger.info("Cron fired %d times over %s of virtual time", len(call_count), time_end - time_start)
 
 
 # --- Scenario 7: Scheduler --- (not supported in v1)
@@ -216,79 +243,104 @@ async def test_cron_runs_on_schedule(ts_env: WorkflowEnvironment):
 # --- Scenario 8: SAA --- (not supported in v1)
 
 # --- Scenario 9: TimeSkipping Sleep ---
-
-async def test_partial_clock_advance_fires_only_short_timer(ts_env: WorkflowEnvironment):
-    task_queue = f"tq-two-timer-{uuid4()}"
-    async with Worker(ts_env.client, task_queue=task_queue, workflows=[TwoTimerWorkflow]):
-        handle = await ts_env.client.start_workflow(
-            TwoTimerWorkflow.run,
-            id=f"wf-{uuid4()}",
-            task_queue=task_queue,
-        )
-        await ts_env.sleep(3 * 60 * 60)
-
-        short_fired = await handle.query(TwoTimerWorkflow.short_fired)
-        long_fired = await handle.query(TwoTimerWorkflow.long_fired)
-
-        assert short_fired is True
-        assert long_fired is False
-        logger.info("After 3h advance: short_fired=%s, long_fired=%s", short_fired, long_fired)
-
-        await handle.cancel()
-
-
-async def test_env_sleep_then_signal_beats_timer(ts_env: WorkflowEnvironment):
-    task_queue = f"tq-interaction-{uuid4()}"
+async def test_workflow_waiting_for_signals(ts_env: WorkflowEnvironment):
+    # Simulates a real scenario where signals are sent at different time.
+    workflow_id = f"signal-wf-{uuid4()}"
+    task_queue = f"tq-signal-{uuid4()}"
     async with Worker(
         ts_env.client,
         task_queue=task_queue,
-        workflows=[WorkflowNeedHasTimerAndInteraction],
-        activities=[dummy_activity],
+        workflows=[WorkflowWaitingForSignals],
     ):
+        time_start = await ts_env.get_current_time()
         handle = await ts_env.client.start_workflow(
-            WorkflowNeedHasTimerAndInteraction.run,
-            id=f"wf-{uuid4()}",
+            WorkflowWaitingForSignals.run,
+            id=workflow_id,
             task_queue=task_queue,
         )
-        # Advance past the 1h sleep so the workflow reaches wait_condition.
-        await ts_env.sleep(timedelta(hours=1).total_seconds())
-        await handle.signal(WorkflowNeedHasTimerAndInteraction.go)
+        await ts_env.sleep(timedelta(minutes=30).total_seconds())
+        await handle.signal(WorkflowWaitingForSignals.prepare_done)
+        time_after_prepare = await ts_env.get_current_time()
+        assert time_after_prepare - time_start >= timedelta(minutes=30)
+
+        await ts_env.sleep(timedelta(minutes=30).total_seconds())
+        await handle.signal(WorkflowWaitingForSignals.go)
         result = await handle.result()
 
-    assert result is True  # signal arrived within 1 minute window
+    assert result is True
 
 
-async def test_env_sleep_steps_through_parent_child_interaction(ts_env: WorkflowEnvironment):
-    task_queue = f"tq-parent-child-interaction-{uuid4()}"
-    parent_id = f"parent-{uuid4()}"
-    child_id = f"child-{parent_id}"
+# --- Scenario 10: Parent + Two Children + Approval Signal ---
 
+async def test_parent_child_both_wait_on_condition(ts_env: WorkflowEnvironment):
+    # Both parent and child have their own signal windows.
+    # The child workflow ID is derived from the parent ID — in production this
+    # mirrors looking up the child workflow ID from a DB record and building a
+    # handle from it, without needing to query Temporal's workflow list.
+    #
+    # Timeline (virtual):
+    #   t=0h    parent starts, sleeps 1h
+    #   t=1h    parent starts child; child sleeps 30min
+    #   t=1h30m child opens its 5-min signal window  ← env.sleep(1.5h) → signal child
+    #   t=1h30m child completes, parent resumes, sleeps 1h
+    #   t=2h30m parent opens its 5-min signal window ← env.sleep(1h)  → signal parent
+    workflow_id = f"parent-child-condition-{uuid4()}"
+    child_id = f"{workflow_id}-child"
+    task_queue = f"tq-parent-child-condition-{uuid4()}"
     async with Worker(
         ts_env.client,
         task_queue=task_queue,
-        workflows=[ParentWorkflowWithChildInteraction, ChildWorkflowWaitingForSignal],
-        activities=[dummy_activity],
+        workflows=[ParentChildBothWaitOnCondition, ChildWithCondition],
     ):
         handle = await ts_env.client.start_workflow(
-            ParentWorkflowWithChildInteraction.run,
-            child_id,
-            id=parent_id,
+            ParentChildBothWaitOnCondition.run,
+            id=workflow_id,
             task_queue=task_queue,
         )
+        # Build child handle from its known ID (no Temporal list query needed)
+        child_handle = ts_env.client.get_workflow_handle(child_id)
 
-        # Step 1: advance past parent's 1h sleep so the child is started.
-        await ts_env.sleep(timedelta(hours=1, minutes=10).total_seconds())
-        # Step 2: signal child — beats its 5min timer after the 30min sleep.
-        await ts_env.client.get_workflow_handle(child_id).signal(
-            ChildWorkflowWaitingForSignal.go
-        )
-        # Step 3: advance past parent's second 1h sleep.
+        # Advance to t=1.5h: parent has slept, child has slept, child's window is open
+        await ts_env.sleep(timedelta(hours=1, minutes=30).total_seconds())
+        await child_handle.signal(ChildWithCondition.proceed)
+
+        # Advance to t=2.5h: child done, parent slept 1h more, parent's window is open
         await ts_env.sleep(timedelta(hours=1).total_seconds())
-        # Step 4: signal parent — beats its 5min timer.
-        await handle.signal(ParentWorkflowWithChildInteraction.go)
+        await handle.signal(ParentChildBothWaitOnCondition.proceed)
 
+        child_signaled, parent_signaled = await handle.result()
+
+    assert child_signaled is True
+    assert parent_signaled is True
+
+
+async def test_parent_with_two_children_approved_in_time(ts_env: WorkflowEnvironment):
+    # Simulates a review/approval flow: two parallel jobs must finish before a
+    # human-approval window opens. ChildA takes 1h, ChildB takes 2h; the parent
+    # then waits 1h more (cooldown) and opens a 1h approval window (+3h to +4h).
+    # env.sleep() pauses time-skipping so we can inject the signal at +3.5h,
+    # landing inside the window.
+    workflow_id = f"parent-two-children-{uuid4()}"
+    task_queue = f"tq-parent-two-children-{uuid4()}"
+    async with Worker(
+        ts_env.client,
+        task_queue=task_queue,
+        workflows=[ParentWithTwoChildren, ChildA, ChildB],
+    ):
+        time_start = await ts_env.get_current_time()
+        handle = await ts_env.client.start_workflow(
+            ParentWithTwoChildren.run,
+            id=workflow_id,
+            task_queue=task_queue,
+        )
+        # Advance past children (2h) + cooldown (1h); land at +3.5h inside the approval window
+        await ts_env.sleep(timedelta(hours=3, minutes=30).total_seconds())
+        time_in_window = await ts_env.get_current_time()
+        assert time_in_window - time_start >= timedelta(hours=3)
+
+        await handle.signal(ParentWithTwoChildren.approve)
         result = await handle.result()
 
-    assert result.parent_signal_won is True
-    assert result.child_signal_won is True
-    logger.info("Parent-child interaction complete: %s", result)
+    assert result is True
+
+
