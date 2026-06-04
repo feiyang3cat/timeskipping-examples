@@ -17,6 +17,7 @@ import pytest_asyncio
 from temporalio import activity
 from temporalio.client import WorkflowFailureError
 from temporalio.common import RetryPolicy
+from temporalio.exceptions import ApplicationError
 from temporalio.exceptions import TimeoutError as TemporalTimeoutError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
@@ -24,7 +25,6 @@ from temporalio.worker import Worker
 from activities import dummy_activity
 from workflow import (
     ChildWorkflowWaitingForSignal,
-    FailFirstAttemptWorkflow,
     ParentChildWorkflowWithUserTimer,
     ParentWorkflowWithChildInteraction,
     ThisWorkflowRunsWithCronOrRetry,
@@ -33,6 +33,7 @@ from workflow import (
     WorkflowNeedHasTimerAndInteraction,
     WorkflowNeedInteraction,
     WorkflowWithActivityRetries,
+    WorkflowWithStartDelay,
     WorkflowWithUserTimer,
 )
 
@@ -100,9 +101,24 @@ async def test_time_skipping_in_parent_child_workflow_with_user_timer(
 
 async def test_workflow_retry_backoff(ts_env: WorkflowEnvironment):
     task_queue = f"tq-wf-retry-{uuid4()}"
-    async with Worker(ts_env.client, task_queue=task_queue, workflows=[FailFirstAttemptWorkflow]):
-        result = await ts_env.client.execute_workflow(
-            FailFirstAttemptWorkflow.run,
+    calls = []
+
+    @activity.defn(name="dummy_activity")
+    async def dummy_activity_fail_once(name: str, activity_duration=timedelta()) -> str:
+        calls.append(1)
+        if len(calls) == 1:
+            raise ApplicationError("simulated failure", non_retryable=True)
+        return f"done {name}"
+
+    async with Worker(
+        ts_env.client,
+        task_queue=task_queue,
+        workflows=[ThisWorkflowRunsWithCronOrRetry],
+        activities=[dummy_activity_fail_once],
+    ):
+        time_start = await ts_env.get_current_time()
+        await ts_env.client.execute_workflow(
+            ThisWorkflowRunsWithCronOrRetry.run,
             id=f"wf-{uuid4()}",
             task_queue=task_queue,
             retry_policy=RetryPolicy(
@@ -111,7 +127,10 @@ async def test_workflow_retry_backoff(ts_env: WorkflowEnvironment):
                 maximum_attempts=3,
             ),
         )
-    assert result == "succeeded on attempt 2"
+        time_end = await ts_env.get_current_time()
+
+    assert len(calls) == 2
+    assert time_end - time_start >= timedelta(hours=1)
 
 
 # --- Scenario 3: Workflow Execution/Run Timeout ---
@@ -146,7 +165,23 @@ async def test_workflow_times_out_after_execution_timeout(ts_env: WorkflowEnviro
     assert isinstance(exc_info.value.cause, TemporalTimeoutError)
 
 
-# --- Scenario 4: Workflow Start Delay --- (coming soon)
+# --- Scenario 4: Workflow Start Delay ---
+
+async def test_workflow_start_delay(ts_env: WorkflowEnvironment):
+    task_queue = f"tq-start-delay-{uuid4()}"
+    async with Worker(ts_env.client, task_queue=task_queue, workflows=[WorkflowWithStartDelay]):
+        time_start = await ts_env.get_current_time()
+        result = await ts_env.client.execute_workflow(
+            WorkflowWithStartDelay.run,
+            id=f"wf-{uuid4()}",
+            task_queue=task_queue,
+            start_delay=timedelta(hours=2),
+        )
+    completed_time = datetime.fromisoformat(result)
+    delta = completed_time - time_start
+    assert delta >= timedelta(hours=2)
+    assert delta < timedelta(hours=3)
+
 
 # --- Scenario 5: Activity Retry ---
 
@@ -196,9 +231,9 @@ async def test_cron_runs_on_schedule(ts_env: WorkflowEnvironment):
             ThisWorkflowRunsWithCronOrRetry.run,
             id=workflow_id,
             task_queue=task_queue,
-            cron_schedule="* * * * *",
+            cron_schedule="0 9 * * *",  # every day at 9:00 AM
         )
-        await ts_env.sleep(3 * 60)
+        await ts_env.sleep(timedelta(days=3).total_seconds())
         await handle.terminate()
 
     runs = [
@@ -206,8 +241,11 @@ async def test_cron_runs_on_schedule(ts_env: WorkflowEnvironment):
             f'WorkflowId = "{workflow_id}" AND ExecutionStatus = "Completed"'
         )
     ]
-    assert len(runs) >= 2
+    assert len(runs) >= 3
     start_times = sorted(r.start_time for r in runs)
+    for i in range(1, len(start_times)):
+        gap = start_times[i] - start_times[i - 1]
+        assert timedelta(hours=23) <= gap <= timedelta(hours=25)
     logger.info("Cron completed %d runs: %s", len(runs), [t.isoformat() for t in start_times])
 
 

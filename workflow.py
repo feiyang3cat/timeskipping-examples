@@ -84,7 +84,13 @@ class WaitForSignalWorkflow:
         self._signaled = True
 
 
-# --- Scenario 4: Workflow Start Delay --- (coming soon)
+# --- Scenario 4: Workflow Start Delay ---
+
+@workflow.defn
+class WorkflowWithStartDelay:
+    @workflow.run
+    async def run(self) -> str:
+        return workflow.now().isoformat()
 
 
 # --- Scenario 5: Activity Retry ---

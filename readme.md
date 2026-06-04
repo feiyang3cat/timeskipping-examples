@@ -19,15 +19,15 @@ This repo contains examples of time-skipping best practices in testing, along wi
 
 | # | Execution Type | Feature | Example | v1 | v2 |
 |---|---------------|---------|---------|----|----|
-| 1 | workflow | User Timers | [v1/test_workflow.py#L49](v1/test_workflow.py#L49) | ✅ | — |
-| 2 | workflow | Workflow Retry | [v1/test_workflow.py#L99](v1/test_workflow.py#L99) | ✅ | — |
-| 3 | workflow | Workflow Execution/Run Timeouts | [v1/test_workflow.py#L117](v1/test_workflow.py#L117) | ✅ | — |
-| 4 | workflow | Workflow Start Delay | | — | — |
-| 5 | workflow | Activity Retry | [v1/test_workflow.py#L151](v1/test_workflow.py#L151) | ✅ | — |
-| 6 | workflow | Cron | [v1/test_workflow.py#L184](v1/test_workflow.py#L184) | ✅ | — |
+| 1 | workflow | User Timers | [v1/test_workflow.py#L50](v1/test_workflow.py#L50) | ✅ | — |
+| 2 | workflow | Workflow Retry | [v1/test_workflow.py#L100](v1/test_workflow.py#L100) | ✅ | — |
+| 3 | workflow | Workflow Execution/Run Timeouts | [v1/test_workflow.py#L136](v1/test_workflow.py#L136) | ✅ | — |
+| 4 | workflow | Workflow Start Delay | [v1/test_workflow.py#L168](v1/test_workflow.py#L168) | ✅ | — |
+| 5 | workflow | Activity Retry | [v1/test_workflow.py#L186](v1/test_workflow.py#L186) | ✅ | — |
+| 6 | workflow | Cron | [v1/test_workflow.py#L219](v1/test_workflow.py#L219) | ✅ | — |
 | 7 | scheduler | Scheduler | | ❌ | — |
 | 8 | SAA | Retry, Timeout, Start Delay | | ❌ | — |
-| 9 | all types | TimeSkipping Sleep | [v1/test_workflow.py#L218](v1/test_workflow.py#L218) | ✅ | — |
+| 9 | all types | TimeSkipping Sleep | [v1/test_workflow.py#L256](v1/test_workflow.py#L256) | ✅ | — |
 
 > ✅ example exists · — coming soon · ❌ not supported
 >
