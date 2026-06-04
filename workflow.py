@@ -3,13 +3,14 @@ from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
+from temporalio.exceptions import ApplicationError
 
 from activities import dummy_activity, retry_activity
 
 default_retry_policy = RetryPolicy(maximum_attempts=1)
 
 
-# --- Best practices ---
+# --- Scenario 1: User Timers ---
 
 @workflow.defn
 class WorkflowWithUserTimer:
@@ -54,6 +55,36 @@ class ParentChildWorkflowWithUserTimer:
         return workflow.now().isoformat()
 
 
+# --- Scenario 2: Workflow Retry ---
+
+@workflow.defn
+class FailFirstAttemptWorkflow:
+    @workflow.run
+    async def run(self) -> str:
+        if workflow.info().attempt == 1:
+            raise ApplicationError("first attempt fails")
+        return f"succeeded on attempt {workflow.info().attempt}"
+
+
+# --- Scenario 3: Workflow Execution/Run Timeouts ---
+
+@workflow.defn
+class WaitForSignalWorkflow:
+    def __init__(self) -> None:
+        self._signaled = False
+
+    @workflow.run
+    async def run(self) -> str:
+        await workflow.wait_condition(lambda: self._signaled)
+        return "signaled"
+
+    @workflow.signal
+    def go(self) -> None:
+        self._signaled = True
+
+
+# --- Scenario 4: Activity Retry ---
+
 @workflow.defn
 class WorkflowWithActivityRetries:
     @workflow.run
@@ -68,6 +99,27 @@ class WorkflowWithActivityRetries:
             ),
         )
 
+
+# --- Scenario 6: Cron ---
+
+@workflow.defn
+class ThisWorkflowRunsWithCronOrRetry:
+    """Short workflow body used as a cron/retry target.
+
+    Note: the test server uses UNIX 5-field cron (minute granularity is the floor),
+    so sub-minute schedules must be scaled up 60× (e.g. 1s → 1min).
+    """
+
+    @workflow.run
+    async def run(self):
+        await workflow.execute_activity(
+            dummy_activity,
+            "routine activity for cron",
+            start_to_close_timeout=timedelta(seconds=10),
+        )
+
+
+# --- Scenario 7: TimeSkipping Sleep ---
 
 @workflow.defn
 class WorkflowNeedInteraction:
@@ -122,20 +174,32 @@ class WorkflowNeedHasTimerAndInteraction:
 
 
 @workflow.defn
-class ThisWorkflowRunsWithCronOrRetry:
-    """Short workflow body used as a cron/retry target.
+class TwoTimerWorkflow:
+    """Two concurrent timers (1h and 10h) — used to test partial clock advances."""
 
-    Note: the test server uses UNIX 5-field cron (minute granularity is the floor),
-    so sub-minute schedules must be scaled up 60× (e.g. 1s → 1min).
-    """
+    def __init__(self) -> None:
+        self._short_fired = False
+        self._long_fired = False
 
     @workflow.run
-    async def run(self):
-        await workflow.execute_activity(
-            dummy_activity,
-            "routine activity for cron",
-            start_to_close_timeout=timedelta(seconds=10),
-        )
+    async def run(self) -> None:
+        async def short_timer() -> None:
+            await workflow.sleep(timedelta(hours=1))
+            self._short_fired = True
+
+        async def long_timer() -> None:
+            await workflow.sleep(timedelta(hours=10))
+            self._long_fired = True
+
+        await asyncio.gather(short_timer(), long_timer())
+
+    @workflow.query
+    def short_fired(self) -> bool:
+        return self._short_fired
+
+    @workflow.query
+    def long_fired(self) -> bool:
+        return self._long_fired
 
 
 # --- Anti-patterns ---
