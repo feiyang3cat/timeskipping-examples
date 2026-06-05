@@ -37,10 +37,10 @@ This repo contains examples of time-skipping best practices in testing, along wi
 
 ### More examples with sleep
 
-#### some complicated examples
-- parent workflow waiting on signals with timeouts: [[workflow](workflow.py#L161)] · [[test](v1/test_workflow.py#L317)]
-- parent + child, both waiting on their own signal windows: [[workflow](workflow.py#L204)] · [[test](v1/test_workflow.py#L275)]
+#### Some complicated examples
+- parent workflow waiting on signals with timeouts: [[workflow](workflow.py#L161)] · [[test](v1/test_workflow.py#L274)]
+- parent + child, both waiting on their own signal windows: [[workflow](workflow.py#L204)] · [[test](v1/test_workflow.py#L305)]
 
-#### some anti-patterns
-- busy workflow
-- workflows that should skip time to the completion
+#### Some anti-patterns
+- [busy workflow](workflow.py#L251) — if no failures, retries, or crons are in place, this workflow is always busy with workflow tasks/activities and doesn't need time-skipping or sleep
+- [unnecessary `env.sleep()`](workflow.py#L269) — this workflow can just keep time-skipping to the end

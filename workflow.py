@@ -174,7 +174,7 @@ class ChildB:
 
 
 @workflow.defn
-class ParentWithTwoChildren:
+class ParentWithChildAndWaitCondition:
     def __init__(self) -> None:
         self._approved = False
 
@@ -245,13 +245,12 @@ class ParentChildBothWaitOnCondition:
         return child_signaled, self._signaled
 
 
-# --- Anti-patterns ---
+# --- Anti-patterns of Sleep ---
 
 @workflow.defn
 class BusyWorkflow:
-    """Anti-pattern: no sleep or wait_condition — time-skipping has nothing to skip.
-    This workflow runs at real wall-clock speed regardless of the test environment.
-    In v2, calling env.sleep() past the end of execution returns an error.
+    """Anti-pattern:  usually this kind of busy workflow doesn't need time skipping
+    if we are not testing retries/cron/etc.
     """
 
     @workflow.run
@@ -260,15 +259,16 @@ class BusyWorkflow:
             await workflow.execute_activity(
                 dummy_activity,
                 "busy_workflow_activity",
-                start_to_close_timeout=timedelta(seconds=60),
+                start_to_close_timeout=timedelta(minutes=10),
             )
         return workflow.now().isoformat()
 
 
 @workflow.defn
 class WaitingWorkflowOnUserTimer:
-    """Anti-pattern: workflow has a sleep but the test uses env.sleep() unnecessarily.
-    Just let time-skipping run the workflow to completion on its own.
+    """Anti-pattern: this workflow doesn't need to stop time skipping 
+    in the middle and we don't need to use sleep and just enable time skipping
+    to the end.
     """
 
     @workflow.run

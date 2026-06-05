@@ -270,7 +270,37 @@ async def test_workflow_waiting_for_signals(ts_env: WorkflowEnvironment):
     assert result is True
 
 
-# --- Scenario 10: Parent + Two Children + Approval Signal ---
+# --- Scenario 10: Complicated Sleep Scenarios ---
+async def test_parent_with_child_and_wait_condition(ts_env: WorkflowEnvironment):
+    # Simulates a review/approval flow: two parallel jobs must finish before a
+    # human-approval window opens. ChildA takes 1h, ChildB takes 2h; the parent
+    # then waits 1h more (cooldown) and opens a 1h approval window (+3h to +4h).
+    # env.sleep() pauses time-skipping so we can inject the signal at +3.5h,
+    # landing inside the window.
+    workflow_id = f"parent-two-children-{uuid4()}"
+    task_queue = f"tq-parent-two-children-{uuid4()}"
+    async with Worker(
+        ts_env.client,
+        task_queue=task_queue,
+        workflows=[ParentWithChildAndWaitCondition, ChildA, ChildB],
+    ):
+        time_start = await ts_env.get_current_time()
+        handle = await ts_env.client.start_workflow(
+            ParentWithChildAndWaitCondition.run,
+            id=workflow_id,
+            task_queue=task_queue,
+        )
+        # Advance past children (2h) + cooldown (1h); land at +3.5h inside the approval window
+        await ts_env.sleep(timedelta(hours=3, minutes=30).total_seconds())
+        time_in_window = await ts_env.get_current_time()
+        assert time_in_window - time_start >= timedelta(hours=3)
+
+        await handle.signal(ParentWithChildAndWaitCondition.approve)
+        result = await handle.result()
+
+    assert result is True
+
+
 
 async def test_parent_child_both_wait_on_condition(ts_env: WorkflowEnvironment):
     # Both parent and child have their own signal windows.
@@ -312,35 +342,5 @@ async def test_parent_child_both_wait_on_condition(ts_env: WorkflowEnvironment):
 
     assert child_signaled is True
     assert parent_signaled is True
-
-
-async def test_parent_with_two_children_approved_in_time(ts_env: WorkflowEnvironment):
-    # Simulates a review/approval flow: two parallel jobs must finish before a
-    # human-approval window opens. ChildA takes 1h, ChildB takes 2h; the parent
-    # then waits 1h more (cooldown) and opens a 1h approval window (+3h to +4h).
-    # env.sleep() pauses time-skipping so we can inject the signal at +3.5h,
-    # landing inside the window.
-    workflow_id = f"parent-two-children-{uuid4()}"
-    task_queue = f"tq-parent-two-children-{uuid4()}"
-    async with Worker(
-        ts_env.client,
-        task_queue=task_queue,
-        workflows=[ParentWithTwoChildren, ChildA, ChildB],
-    ):
-        time_start = await ts_env.get_current_time()
-        handle = await ts_env.client.start_workflow(
-            ParentWithTwoChildren.run,
-            id=workflow_id,
-            task_queue=task_queue,
-        )
-        # Advance past children (2h) + cooldown (1h); land at +3.5h inside the approval window
-        await ts_env.sleep(timedelta(hours=3, minutes=30).total_seconds())
-        time_in_window = await ts_env.get_current_time()
-        assert time_in_window - time_start >= timedelta(hours=3)
-
-        await handle.signal(ParentWithTwoChildren.approve)
-        result = await handle.result()
-
-    assert result is True
 
 
