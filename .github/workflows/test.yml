@@ -7,6 +7,17 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - name: Run ruff
+        run: uv run --directory v1 ruff check ..
+
   test-v1:
     name: v1 (SDK testing server)
     runs-on: ubuntu-latest

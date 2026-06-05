@@ -1,10 +1,8 @@
 import asyncio
-from dataclasses import dataclass
 from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ApplicationError
 
 from activities import dummy_activity, retry_activity
 

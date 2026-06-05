@@ -28,18 +28,18 @@ This repo contains examples of time-skipping best practices in testing, along wi
 | 3 | workflow | Workflow Execution/Run Timeouts | [workflow](workflow.py#L62) · [test](v1/test_workflow.py#L136) | 🔜 |
 | 4 | workflow | Workflow Start Delay | [workflow](workflow.py#L79) · [test](v1/test_workflow.py#L168) | 🔜 |
 | 5 | workflow | Activity Retry | [workflow](workflow.py#L88) · [test](v1/test_workflow.py#L186) | 🔜 |
-| 6 | workflow | Cron | [workflow](workflow.py#L108) · [test using sleep](v1/test_workflow.py#L231) | 🔜 |
+| 6 | workflow | Cron | [workflow](workflow.py#L108) · [test using sleep](v1/test_workflow.py#L232) | 🔜 |
 | 7 | scheduler | Scheduler | ❌ Schedules API not supported in the SDK testing server | 🔜 |
 | 8 | SAA | Retry, Timeout, Start Delay | ❌ SAA not supported in the SDK testing server | 🔜 |
-| 9 | workflow | wait for condition/signals/updates | [test signals using sleep](v1/test_workflow.py#L261) | 🔜 |
+| 9 | workflow | wait for condition/signals/updates | [workflow](workflow.py#L129) · [test using sleep](v1/test_workflow.py#L274) | 🔜 |
 
 > 🔜 coming soon · v1: SDK testing server · v2: Temporal OSS server and Cloud
 
 ### More examples with sleep
 
 #### Some complicated examples
-- parent workflow waiting on signals with timeouts: [[workflow](workflow.py#L161)] · [[test](v1/test_workflow.py#L274)]
-- parent + child, both waiting on their own signal windows: [[workflow](workflow.py#L204)] · [[test](v1/test_workflow.py#L305)]
+- parent workflow waiting on signals with timeouts: [[workflow](workflow.py#L161)] · [[test](v1/test_workflow.py#L307)]
+- parent + child, both waiting on their own signal windows: [[workflow](workflow.py#L204)] · [[test](v1/test_workflow.py#L347)]
 
 #### Some anti-patterns
 - [busy workflow](workflow.py#L251) — if no failures, retries, or crons are in place, this workflow is always busy with workflow tasks/activities and doesn't need time-skipping or sleep
