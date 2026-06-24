@@ -25,7 +25,7 @@ This repo contains examples of time-skipping best practices in testing, along wi
 |---|---------------|---------|------------|-----|
 | 1 | workflow | User Timers | [workflow](workflow.py#L14) · [test](v1/test_workflow.py#L50) | 🔜 |
 | 2 | workflow | Workflow Retry | [workflow](workflow.py#L59) · [test](v1/test_workflow.py#L100) | 🔜 |
-| 3 | workflow | Workflow Execution/Run Timeouts | [workflow](workflow.py#L62) · [test using sleep](v1/test_workflow.py#L136) | 🔜 |
+| 3 | workflow | Workflow Execution/Run Timeouts | [workflow](workflow.py#L62) · [test (auto-skip, no sleep)](v1/test_workflow.py#L146) | 🔜 |
 | 4 | workflow | Workflow Start Delay | [workflow](workflow.py#L79) · [test](v1/test_workflow.py#L168) | 🔜 |
 | 5 | workflow | Activity Retry | [workflow](workflow.py#L88) · [test](v1/test_workflow.py#L186) | 🔜 |
 | 6 | workflow | Cron | [workflow](workflow.py#L108) · [test using sleep](v1/test_workflow.py#L232) | 🔜 |

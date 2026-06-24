@@ -133,6 +133,15 @@ async def test_workflow_retry_backoff(ts_env: WorkflowEnvironment):
 
 
 # --- Scenario 3: Workflow Execution/Run Timeout ---
+#
+# No env.sleep() is needed here. The workflow waits on a signal forever, so the
+# only future event is the timeout timer. When the client blocks on
+# handle.result() (a long-poll for the next history event) and nothing else can
+# make progress, the time-skipping server auto-skips its clock straight to that
+# timer and fires the timeout. result() returns in milliseconds of real time.
+#
+# (Note: handle.describe() would NOT trigger this — it's a one-shot status read,
+# not a "wait for progress" request, so it gives the server no reason to skip.)
 
 async def test_workflow_times_out_after_run_timeout(ts_env: WorkflowEnvironment):
     task_queue = f"tq-run-timeout-{uuid4()}"
@@ -143,7 +152,7 @@ async def test_workflow_times_out_after_run_timeout(ts_env: WorkflowEnvironment)
             task_queue=task_queue,
             run_timeout=timedelta(hours=1),
         )
-        await ts_env.sleep(2 * 60 * 60)
+        # Time-skipping auto-advances to the run_timeout — no env.sleep() required.
         with pytest.raises(WorkflowFailureError) as exc_info:
             await handle.result()
     assert isinstance(exc_info.value.cause, TemporalTimeoutError)
@@ -158,7 +167,7 @@ async def test_workflow_times_out_after_execution_timeout(ts_env: WorkflowEnviro
             task_queue=task_queue,
             execution_timeout=timedelta(hours=1),
         )
-        await ts_env.sleep(2 * 60 * 60)
+        # Time-skipping auto-advances to the execution_timeout — no env.sleep() required.
         with pytest.raises(WorkflowFailureError) as exc_info:
             await handle.result()
     assert isinstance(exc_info.value.cause, TemporalTimeoutError)
