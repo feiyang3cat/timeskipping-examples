@@ -8,7 +8,9 @@ Time-skipping examples (v1) across supported scenarios:
 9. env.sleep() to pause time-skipping mid-execution
 """
 
+import asyncio
 import logging
+import time
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -32,6 +34,9 @@ from workflow import (
     ParentWithChildAndWaitCondition,
     ThisWorkflowRunsWithCronOrRetry,
     WaitForSignalWorkflow,
+    WorkflowRacingActivityAndTimer,
+    WorkflowRunningLongActivity,
+    WorkflowWithTwoTimersAndActivity,
     WorkflowWaitingForSignals,
     WorkflowWithActivityRetries,
     WorkflowWithStartDelay,
@@ -44,6 +49,15 @@ logger = logging.getLogger(__name__)
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def ts_env():
     logger.info("Booting TIME-SKIPPING test server...")
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        yield env
+
+
+# For tests that leave the server's Time Locking Counter locked once more than
+# it started (a cancelled in-flight activity or a never-completed workflow task
+# keeps its lock), which would stall every later test on the shared ts_env.
+@pytest_asyncio.fixture
+async def isolated_ts_env():
     async with await WorkflowEnvironment.start_time_skipping() as env:
         yield env
 
@@ -366,3 +380,234 @@ async def test_parent_child_both_wait_on_condition(ts_env: WorkflowEnvironment):
     assert parent_signaled is True
 
 
+# --- Scenario 9++: env.sleep() inside an activity fires a racing user timer ---
+#
+# The workflow races an activity against a 10-min user timer that is well under
+# the activity's 30-min start_to_close_timeout. While an activity is in flight
+# the server keeps its clock at real wall-clock speed, so normally the timer
+# would not fire for 10 *real* minutes. Instead the mocked activity calls
+# env.sleep() from inside itself — a manual time skip that advances the virtual
+# clock past the 10-min timer even though the activity is still running. The
+# activity also does a real asyncio.sleep so it stays in flight until the
+# skipped-forward user timer fires and cancels it. As a result the user timer
+# wins the race, and the whole test finishes in milliseconds of real time.
+async def test_env_sleep_in_activity_fires_user_timer(
+    isolated_ts_env: WorkflowEnvironment,
+):
+    ts_env = isolated_ts_env
+    task_queue = f"tq-race-activity-timer-{uuid4()}"
+
+    @activity.defn(name="dummy_activity")
+    async def slow_dummy(name: str, activity_duration=timedelta()) -> str:
+        await asyncio.gather(
+            asyncio.sleep(2),  # real in-flight work
+            # manual time skip: advance virtual time past the 10-min user timer
+            # while this activity is still running
+            ts_env.sleep(timedelta(minutes=11).total_seconds()),
+        )
+        return f"done {name}"
+
+    async with Worker(
+        ts_env.client,
+        task_queue=task_queue,
+        workflows=[WorkflowRacingActivityAndTimer],
+        activities=[slow_dummy],
+    ):
+        winner = await ts_env.client.execute_workflow(
+            WorkflowRacingActivityAndTimer.run,
+            args=[
+                timedelta(minutes=10).total_seconds(),  # user timer
+                timedelta(minutes=30).total_seconds(),  # activity start_to_close_timeout
+            ],
+            id=f"wf-{uuid4()}",
+            task_queue=task_queue,
+        )
+
+    # env.sleep() skipped the virtual clock past the 10-min timer while the
+    # activity was still sleeping, so the user timer fires first.
+    assert winner == "timer"
+
+
+# --- Scenario 9+++: env.sleep() does NOT skip while an activity is in flight ---
+#
+# Question: with a 10s activity running, does env.sleep(3s) return instantly or
+# after 3s? Answer: after ~3 REAL seconds, NOT instantly.
+#
+# An in-flight activity holds a time-skipping lock, so the server cannot advance
+# the virtual clock while it runs. An env.sleep() overlapping the activity
+# therefore elapses in real wall-clock time; only the portion after the activity
+# finishes (and releases the lock) is skipped instantly. Here the whole 3s falls
+# inside the 10s in-flight window, so nothing gets skipped.
+async def test_env_sleep_blocks_in_real_time_while_activity_in_flight(
+    ts_env: WorkflowEnvironment,
+):
+    task_queue = f"tq-sleep-vs-activity-{uuid4()}"
+
+    @activity.defn(name="dummy_activity")
+    async def slow_dummy(name: str, activity_duration=timedelta()) -> str:
+        await asyncio.sleep(10)  # 10 real seconds in flight
+        return f"done {name}"
+
+    async with Worker(
+        ts_env.client,
+        task_queue=task_queue,
+        workflows=[WorkflowRunningLongActivity],
+        activities=[slow_dummy],
+    ):
+        # (A) Nothing in flight: env.sleep(3s) skips instantly (virtual clock jumps).
+        wall = time.monotonic()
+        await ts_env.sleep(timedelta(seconds=3).total_seconds())
+        idle_elapsed = time.monotonic() - wall
+        assert idle_elapsed < 1.0
+
+        # (B) Activity in flight: env.sleep(3s) cannot skip, so it blocks ~3 real seconds.
+        handle = await ts_env.client.start_workflow(
+            WorkflowRunningLongActivity.run,
+            id=f"wf-{uuid4()}",
+            task_queue=task_queue,
+        )
+        await asyncio.sleep(0.5)  # let the activity start and take the time-skipping lock
+        wall = time.monotonic()
+        await ts_env.sleep(timedelta(seconds=3).total_seconds())
+        busy_elapsed = time.monotonic() - wall
+        assert busy_elapsed >= 2.5
+
+        await handle.result()
+
+    logger.info(
+        "env.sleep(3s): idle=%.2fs (skipped) vs activity-in-flight=%.2fs (real time)",
+        idle_elapsed,
+        busy_elapsed,
+    )
+
+
+# --- Scenario 9++++: two env.sleep() calls in one activity fire two timers ---
+#
+# The workflow waits on two user timers (1h, 2h) and one activity. While the
+# activity is in flight the server keeps its clock at real speed, so neither
+# timer would fire for real hours. The mocked activity calls env.sleep() TWICE,
+# and the skips ACCUMULATE: the first (+1h) fires the 1h timer, the second
+# (+1h → 2h total) fires the 2h timer, then the activity returns. All three
+# complete in ~2 real seconds, in order: timer1 @1h, timer2 @2h, activity @2h.
+async def test_two_env_sleeps_in_activity_fire_both_timers(
+    ts_env: WorkflowEnvironment,
+):
+    task_queue = f"tq-two-timers-activity-{uuid4()}"
+
+    @activity.defn(name="dummy_activity")
+    async def slow_dummy(name: str, activity_duration=timedelta()) -> str:
+        async def skip_twice():
+            # each env.sleep() manually advances the virtual clock by 1h; the two
+            # skips accumulate to 2h while this activity is still in flight
+            await ts_env.sleep(timedelta(hours=1).total_seconds())
+            await ts_env.sleep(timedelta(hours=1).total_seconds())
+
+        await asyncio.gather(
+            asyncio.sleep(2),  # real in-flight work so the activity outlives both timers
+            skip_twice(),
+        )
+        return f"done {name}"
+
+    async with Worker(
+        ts_env.client,
+        task_queue=task_queue,
+        workflows=[WorkflowWithTwoTimersAndActivity],
+        activities=[slow_dummy],
+    ):
+        completion_order = await ts_env.client.execute_workflow(
+            WorkflowWithTwoTimersAndActivity.run,
+            args=[
+                timedelta(hours=1).total_seconds(),  # timer1
+                timedelta(hours=2).total_seconds(),  # timer2
+                timedelta(hours=3).total_seconds(),  # activity start_to_close_timeout
+            ],
+            id=f"wf-{uuid4()}",
+            task_queue=task_queue,
+        )
+
+    # The two env.sleep() calls stacked up: the first fired the 1h timer, the
+    # second fired the 2h timer, then the activity finished.
+    names = [name for name, _ in completion_order]
+    assert names == ["timer1", "timer2", "activity"]
+    assert completion_order[0][1] == 1  # timer1 fired at +1h (after the first skip)
+    assert completion_order[1][1] == 2  # timer2 fired at +2h (after the second skip)
+    logger.info("completion order (name, virtual hours): %s", completion_order)
+
+
+# --- Scenario 9+++++: env.sleep() from the test also unlocks — if timed right ---
+#
+# env.sleep() does not have to be called inside the activity. The server only
+# keeps a Time Locking Counter and skips whenever it reaches 0, no matter which
+# caller unlocks. The counter starts at 1, handle.result() unlocks it, and every
+# in-flight activity or pending workflow task locks it. So an env.sleep() from
+# the test skips as long as:
+#   - timing: result() is already being awaited (otherwise the starting lock is
+#     still held and env.sleep() runs in real time, as in Scenario 9+++), and
+#   - duration: it reaches the next timer; a shorter skip just locks again.
+async def test_env_sleep_from_test_unlocks_held_activity(ts_env: WorkflowEnvironment):
+    task_queue = f"tq-outside-sleep-activity-{uuid4()}"
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    @activity.defn(name="dummy_activity")
+    async def held_dummy(name: str, activity_duration=timedelta()) -> str:
+        started.set()
+        await release.wait()  # held in flight; no env.sleep() in here
+        return f"done {name}"
+
+    async with Worker(
+        ts_env.client,
+        task_queue=task_queue,
+        workflows=[WorkflowWithTwoTimersAndActivity],
+        activities=[held_dummy],
+    ):
+        handle = await ts_env.client.start_workflow(
+            WorkflowWithTwoTimersAndActivity.run,
+            args=[
+                timedelta(hours=1).total_seconds(),  # timer1
+                timedelta(hours=2).total_seconds(),  # timer2
+                timedelta(hours=3).total_seconds(),  # activity start_to_close_timeout
+            ],
+            id=f"wf-{uuid4()}",
+            task_queue=task_queue,
+        )
+        result = asyncio.ensure_future(handle.result())  # counter 1 -> 0
+        await started.wait()  # activity in flight: counter 0 -> 1
+
+        wall = time.monotonic()
+        await ts_env.sleep(timedelta(hours=1).total_seconds())  # 1 -> 0, fires timer1
+        await ts_env.sleep(timedelta(hours=1).total_seconds())  # 1 -> 0, fires timer2
+        skip_wall = time.monotonic() - wall
+        release.set()
+        completion_order = await result
+
+    assert skip_wall < 2.0
+    assert completion_order == [["timer1", 1], ["timer2", 2], ["activity", 2]]
+    logger.info("completion order (name, virtual hours): %s", completion_order)
+
+
+# A pending workflow task holds a lock too. No worker polls this task queue, so
+# the first workflow task never completes and — unlike Scenario 3 — result()
+# alone cannot skip to the execution timeout. env.sleep() from the test can.
+async def test_env_sleep_from_test_unlocks_pending_workflow_task(
+    isolated_ts_env: WorkflowEnvironment,
+):
+    ts_env = isolated_ts_env
+    handle = await ts_env.client.start_workflow(
+        WaitForSignalWorkflow.run,
+        id=f"wf-{uuid4()}",
+        task_queue=f"tq-no-worker-{uuid4()}",
+        execution_timeout=timedelta(hours=1),
+    )
+    result = asyncio.ensure_future(handle.result())
+    await asyncio.sleep(1)
+    assert not result.done()  # pending workflow task keeps the clock at real speed
+
+    await ts_env.sleep(timedelta(minutes=30).total_seconds())  # too short
+    await asyncio.sleep(0.5)
+    assert not result.done()
+
+    await ts_env.sleep(timedelta(minutes=30).total_seconds())  # reaches the 1h timeout
+    with pytest.raises(WorkflowFailureError) as exc_info:
+        await result
+    assert isinstance(exc_info.value.cause, TemporalTimeoutError)

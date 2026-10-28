@@ -41,6 +41,14 @@ This repo contains examples of time-skipping best practices in testing, along wi
 - parent workflow waiting on signals with timeouts: [[workflow](workflow.py#L161)] · [[test](v1/test_workflow.py#L307)]
 - parent + child, both waiting on their own signal windows: [[workflow](workflow.py#L204)] · [[test](v1/test_workflow.py#L347)]
 
+#### Time-skipping gotchas
+- user timer racing an in-flight activity — while an activity is running the server keeps its clock at real wall-clock speed, so the timer would not fire for real minutes. The mocked activity calls `env.sleep()` from inside itself to manually skip the virtual clock past the (shorter) user timer while still in flight, so the timer fires *first*: [[workflow](workflow.py#L248)] · [[test](v1/test_workflow.py#L383)]
+- `env.sleep()` does **not** skip while an activity is in flight — with a 10s activity running, does `env.sleep(3s)` return instantly or after 3s? *After ~3 real seconds.* An in-flight activity holds a time-skipping lock, so an `env.sleep()` overlapping it elapses in real wall-clock time; only the portion after the activity finishes is skipped instantly: [[workflow](workflow.py#L283)] · [[test](v1/test_workflow.py#L431)]
+- two `env.sleep()` calls inside one activity fire two user timers — a workflow waits on two user timers (1h, 2h) and one activity. Calling `env.sleep()` twice inside the activity *accumulates*: the first skip (+1h) fires the 1h timer, the second (+1h → 2h) fires the 2h timer, then the activity returns — completing in order `timer1 @1h → timer2 @2h → activity @2h`, all in ~2 real seconds: [[workflow](workflow.py#L304)] · [[test](v1/test_workflow.py#L484)]
+- any time-skipping lock can be broken by `env.sleep()` — even one called from the test, not inside the activity. The server only keeps a Time Locking Counter (starts at 1, `handle.result()` unlocks it, each in-flight activity or pending workflow task locks it) and skips whenever it reaches 0, no matter who unlocks. So the call just needs the right *timing* (while `result()` is already being awaited) and the right *duration* (long enough to reach the next timer; a shorter skip locks again):
+    - activity held in flight, two `env.sleep(1h)` from the test fire the 1h and 2h timers: [[workflow](workflow.py#L304)] · [[test](v1/test_workflow.py#L537)]
+    - pending workflow task (no worker), `env.sleep(30m)` is too short, a second `env.sleep(30m)` reaches the 1h execution timeout: [[workflow](workflow.py#L62)] · [[test](v1/test_workflow.py#L589)]
+
 #### Some anti-patterns
 - [busy workflow](workflow.py#L251) — if no failures, retries, or crons are in place, this workflow is always busy with workflow tasks/activities and doesn't need time-skipping or sleep
 - [unnecessary `env.sleep()`](workflow.py#L269) — this workflow can just keep time-skipping to the end

@@ -243,6 +243,110 @@ class ParentChildBothWaitOnCondition:
         return child_signaled, self._signaled
 
 
+# --- Scenario 9++: activity racing a user timer (time-skipping gotcha) ---
+
+@workflow.defn
+class WorkflowRacingActivityAndTimer:
+    """Races an activity against a user timer, returning whichever wins.
+
+    While an activity is in flight, the time-skipping server normally keeps its
+    clock at the real wall-clock rate, so a user timer would only fire after
+    that many *real* seconds pass — even if its duration is far below the
+    activity's start_to_close_timeout. To fire the user timer first without
+    waiting in real time, the (mocked) activity calls ``env.sleep()`` — a manual
+    time skip that advances the virtual clock while the activity is still
+    running. The activity also does a real ``asyncio.sleep`` so it stays in
+    flight until the skipped-forward user timer fires and cancels it.
+    """
+
+    @workflow.run
+    async def run(self, timer_seconds: float, activity_timeout_seconds: float) -> str:
+        activity_task = asyncio.ensure_future(
+            workflow.execute_activity(
+                dummy_activity,
+                "racing activity",
+                start_to_close_timeout=timedelta(seconds=activity_timeout_seconds),
+                retry_policy=default_retry_policy,
+            )
+        )
+        timer_task = asyncio.ensure_future(asyncio.sleep(timer_seconds))
+        done, pending = await workflow.wait(
+            [activity_task, timer_task], return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+        return "timer" if timer_task in done else "activity"
+
+
+# --- Scenario 9+++: env.sleep() while an activity is in flight ---
+
+@workflow.defn
+class WorkflowRunningLongActivity:
+    """Runs a single long activity.
+
+    Used to show that env.sleep() does NOT skip virtual time while an activity
+    is in flight: an in-flight activity holds a time-skipping lock, so any
+    env.sleep() overlapping it elapses in real wall-clock time instead.
+    """
+
+    @workflow.run
+    async def run(self) -> str:
+        return await workflow.execute_activity(
+            dummy_activity,
+            "long running activity",
+            start_to_close_timeout=timedelta(seconds=60),
+            retry_policy=default_retry_policy,
+        )
+
+
+# --- Scenario 9++++: two user timers + an activity that skips time twice ---
+
+@workflow.defn
+class WorkflowWithTwoTimersAndActivity:
+    """Waits on two user timers (e.g. 1h and 2h) and one activity, returning the
+    order in which the three complete.
+
+    While the activity is in flight the server pins its clock to real wall-clock
+    speed, so neither timer would fire for real hours. The mocked activity
+    instead calls ``env.sleep()`` twice from inside itself: each call is a manual
+    time skip that advances the virtual clock, and the two skips accumulate — the
+    first fires the 1h timer, the second fires the 2h timer — all while the
+    activity is still running.
+    """
+
+    @workflow.run
+    async def run(
+        self,
+        timer1_seconds: float,
+        timer2_seconds: float,
+        activity_timeout_seconds: float,
+    ) -> list:
+        start = workflow.now()
+        tasks = {
+            "timer1": asyncio.ensure_future(asyncio.sleep(timer1_seconds)),
+            "timer2": asyncio.ensure_future(asyncio.sleep(timer2_seconds)),
+            "activity": asyncio.ensure_future(
+                workflow.execute_activity(
+                    dummy_activity,
+                    "racing activity",
+                    start_to_close_timeout=timedelta(seconds=activity_timeout_seconds),
+                    retry_policy=default_retry_policy,
+                )
+            ),
+        }
+        name_by_task = {task: name for name, task in tasks.items()}
+        completion_order = []
+        pending = set(tasks.values())
+        while pending:
+            done, pending = await workflow.wait(
+                list(pending), return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in done:
+                elapsed_hours = (workflow.now() - start).total_seconds() / 3600
+                completion_order.append([name_by_task[task], round(elapsed_hours)])
+        return completion_order
+
+
 # --- Anti-patterns of Sleep ---
 
 @workflow.defn
