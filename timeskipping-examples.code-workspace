@@ -1,0 +1,18 @@
+{
+  "folders": [
+    {
+      "name": "V1 Local Testing Server",
+      "path": "v1"
+    },
+    {
+      "name": "V2 Testing Env and Direct API",
+      "path": "v2"
+    }
+  ],
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.vscode-pylance"
+    ]
+  }
+}

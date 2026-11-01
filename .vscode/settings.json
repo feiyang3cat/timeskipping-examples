@@ -1,0 +1,17 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/v2/.venv",
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.cwd": "${workspaceFolder}/v2",
+  "python.testing.pytestArgs": [
+    "-c",
+    "pyproject.toml",
+    "test_workflow.py",
+    "test_activity_time_skipping.py"
+  ],
+  "python.envFile": "${workspaceFolder}/v2/.env",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}",
+    "${workspaceFolder}/v2"
+  ]
+}

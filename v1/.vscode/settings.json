@@ -1,0 +1,15 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.cwd": "${workspaceFolder}",
+  "python.testing.pytestArgs": [
+    "-c",
+    "pyproject.toml",
+    "test_workflow.py"
+  ],
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/..",
+    "${workspaceFolder}"
+  ]
+}

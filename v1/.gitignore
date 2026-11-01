@@ -1,5 +1,6 @@
 .claude/
-.vscode/
+.vscode/*
+!.vscode/settings.json
 __pycache__/
 .venv/
 *.pyc

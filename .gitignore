@@ -10,3 +10,6 @@ venv/
 
 # Editor / OS
 .DS_Store
+
+# Local test configuration
+.env

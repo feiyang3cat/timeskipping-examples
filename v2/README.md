@@ -35,6 +35,22 @@ To reproduce that exact CLI build, run `git checkout 440c1da397ae4520b3d8a25b445
 in the cloned CLI repository before `go build`. The branch and CI may advance
 beyond this tested commit.
 
+## VS Code
+
+Install the Python extension and run `uv sync --locked --directory v2`.
+Copy `v2/.env.example` to `v2/.env` and set `TEMPORAL_CLI_PATH` to the CLI binary
+built above. VS Code reads this file when running tests; the terminal does not
+load it automatically.
+
+Opening the repository folder defaults Test Explorer to V2. Select
+`v2/.venv/bin/python` with **Python: Select Interpreter** if VS Code previously
+selected another environment, then refresh Test Explorer and run the tests.
+
+To work with both versions, open `timeskipping-examples.code-workspace` with
+**File > Open Workspace from File** and run `uv sync --locked --directory v1`
+as well. Each folder has its own interpreter and pytest configuration, so the
+two `test_workflow.py` modules are collected separately.
+
 ## Two ways to use V2
 
 | Mode | API | Example |
