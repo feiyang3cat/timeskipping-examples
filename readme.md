@@ -53,6 +53,7 @@ The CLI used to validate all 40 V2 test cases was commit
 | 7 | scheduler | Scheduler | ❌ Schedules API not supported in the SDK testing server | Not covered | Not covered |
 | 8 | SAA | Retry, Timeout, Start Delay | ❌ SAA not supported in the SDK testing server | Not covered | Not covered |
 | 9 | workflow | wait for condition/signals/updates | [workflow](workflow.py#L129) · [test using sleep](v1/test_workflow.py#L274) | [test](v2/test_workflow.py#L270) | [test](v2/test_workflow.py#L270) |
+| 10 | workflow | Skip time when there is in-flight work | [Leverage lock leaking](manual_time_skipping_report.md#verified-examples) | [Not supported in pre-release](manual_time_skipping_report.md#v2-observations-and-open-questions) | [Not supported in pre-release](manual_time_skipping_report.md#v2-observations-and-open-questions) |
 
 Both V2 columns link to the same parameterized tests: `environment` runs the new env, and `time-skipper` runs the direct API client ([fixture](v2/conftest.py#L28)).
 
