@@ -52,90 +52,11 @@ and CLI branch `fx/time-skipping-cli`, commit
 [`440c1da397ae4520b3d8a25b44515b26028dc54a`](https://github.com/temporalio/cli/commit/440c1da397ae4520b3d8a25b44515b26028dc54a).
 Passing these tests does not resolve the open questions below.
 
-1. **In-flight activities: V1 can manually unlock time skipping; V2 fast-forward remains blocked.**
+1. **In-flight activities:** [V1 `env.sleep()`](v1/test_workflow.py#L394) can advance time while an activity runs and make the timer win; [V2 `fast_forward()`](v2/test_activity_time_skipping.py#L31) waits for the activity, so the activity wins after release. Whether V2 should support forcing the timer to win remains an open question.
 
-   In the [V1 activity/timer race](v1/test_workflow.py#L394), the workflow races an
-   activity against a 10-minute timer. While `execute_workflow()` is awaiting the
-   result, the mocked activity calls `env.sleep(11 minutes)`. This drops the
-   remaining global lock counter to zero and advances time while the activity
-   is still in flight. The test asserts `winner == "timer"`.
+2. **Parent/child clocks — design difference:** V1 shares a global clock, while V2 gives each workflow its own clock; a parent does not inherit its children's skipped duration ([V1 test](v1/test_workflow.py#L89), [V2 test](v2/test_workflow.py#L62)).
 
-   In the [V2 counterpart](v2/test_activity_time_skipping.py#L31), the mocked
-   activity requests `fast_forward(handle, 11 minutes)` in a background task
-   and waits on an explicit release event. The test first checks that the
-   fast-forward has not completed, then releases the activity. It asserts that
-   the workflow result is `"activity"` and the fast-forward returns `False`
-   because the workflow completes before reaching that target. Awaiting the
-   fast-forward inline inside the held activity would prevent that activity
-   from completing and keep the advance blocked.
-
-   The difference is not simply "V1 always skips during activities": the
-   [V1 outside-sleep test](v1/test_workflow.py#L441) also blocks in real time
-   when `result()` is not being awaited, because the global counter stays
-   positive. The [V1 outside-sleep with a background result wait](v1/test_workflow.py#L547)
-   can advance through the held activity; the [V2 counterpart](v2/test_activity_time_skipping.py#L186)
-   remains blocked even with that background result wait. After release, V2
-   observes `activity @0h -> timer1 @1h -> timer2 @2h`, whereas V1 observes
-   `timer1 @1h -> timer2 @2h -> activity @2h` (hours are rounded by the workflow).
-
-   **Open question:** Is blocking all manual advancement during an in-flight
-   activity the intended V2 testing contract? If so, how should a test simulate
-   a workflow timer expiring before a still-running activity without waiting
-   for that timer in real time? The V2 test currently verifies the blocking
-   behavior; it does not reproduce V1's ability to force the timer to win.
-
-2. **Independent parent/child clocks: a design difference.**
-
-   V1 uses one shared server clock. Its [parent/child timer test](v1/test_workflow.py#L89)
-   checks that the parent's completion time is at least two hours after the
-   shared baseline when the children sleep for one and two hours.
-   The [V2 test](v2/test_workflow.py#L62) instead reads each child's result and
-   verifies its own elapsed time: the parent does not acquire the children's
-   skipped durations when they finish.
-
-   This changes interaction timelines. In the two-child approval example, V1
-   advances the shared clock by 3.5 hours: two hours for the children, one hour
-   for the parent's cooldown, and 30 minutes into its approval window
-   ([V1 test](v1/test_workflow.py#L310)). V2 advances the parent's clock by
-   1.5 hours for that cooldown and approval window; the children's waits happen
-   on their own clocks ([V2 test](v2/test_workflow.py#L290)). The
-   [separate parent/child signal-window test](v2/test_workflow.py#L314) explicitly
-   advances the child through its own handle.
-
-   **Classification:** Treat this as a design difference, not a confirmed
-   server bug. A single V1 global timeline cannot be copied directly into V2.
-
-3. **Fast-forward completion versus workflow completion: cause not yet established.**
-
-   In the [two-timer V2 probe](v2/test_activity_time_skipping.py#L116), the
-   activity completes first, then two sequential one-hour advances fire the
-   one-hour and two-hour timers. The workflow completes after the second timer.
-   An initial assertion expected the second fast-forward to return `False`,
-   but actual runs also returned `True`, causing that assertion to fail.
-
-   The assertion was changed from
-   `assert not await ts_env.fast_forward(handle, timedelta(hours=1))` to
-   `await ts_env.fast_forward(handle, timedelta(hours=1))`. The result assertion
-   still requires `[["activity", 0], ["timer1", 1], ["timer2", 2]]`.
-   Consequently, this test verifies completion order and rounded virtual hours,
-   but no longer verifies the second fast-forward's boolean result.
-
-   **Important limitation:** We have not shown that the fast-forward target and
-   workflow completion timestamps are exactly equal. Each advance is relative
-   to the current workflow clock; real time can pass between calls, and the
-   workflow rounds elapsed hours. The earlier explanation that either event
-   can win at an exactly equal timestamp was an unverified hypothesis, not a
-   demonstrated server guarantee.
-
-   **Expected contract to verify:** If the fast-forward target and workflow
-   completion really coincide, fast-forward completion should take precedence
-   and return `True`, according to the previously implemented server fix.
-   The reason for the observed boolean variation remains unresolved. Compare
-   the actual fast-forward target, its reached state, transition/history events,
-   and workflow completion timestamp, and confirm that the tested CLI's server
-   dependency contains that fix before classifying this as a server bug or
-   accepting both outcomes. The relaxed assertion does not establish correctness
-   of this boundary behavior.
+3. **Fast-forward return value — unresolved:** The [two-timer test](v2/test_activity_time_skipping.py#L116) observed both `True` and `False`, but exact equality of the target and workflow completion timestamps was not established. Server polling prioritizes completed fast-forward state over workflow closure; the cause of the variation still needs investigation, and the test currently does not assert this return value.
 
 ## WIP
 
