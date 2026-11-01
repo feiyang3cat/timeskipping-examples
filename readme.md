@@ -65,7 +65,3 @@ See [v2 setup, both APIs, and the full coverage mapping](v2/README.md). All 16 V
 - parent + child, both waiting on their own signal windows: [[workflow](workflow.py#L204)] · [[test](v1/test_workflow.py#L347)]
 
 For V1 manual time-skipping exploration and lock behavior, see the [exploration report](manual_time_skipping_report.md).
-
-#### Some anti-patterns
-- [busy workflow](workflow.py#L251) — if no failures, retries, or crons are in place, this workflow is always busy with workflow tasks/activities and doesn't need time-skipping or sleep
-- [unnecessary `env.sleep()`](workflow.py#L269) — this workflow can just keep time-skipping to the end
