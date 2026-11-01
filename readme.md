@@ -42,17 +42,19 @@ The CLI used to validate all 40 V2 test cases was commit
 
 ### By Features
 
-| # | Execution Type | Feature | v1 Example | v2 |
-|---|---------------|---------|------------|-----|
-| 1 | workflow | User Timers | [workflow](workflow.py#L14) · [test](v1/test_workflow.py#L50) | [tests](v2/test_workflow.py) |
-| 2 | workflow | Workflow Retry | [workflow](workflow.py#L59) · [test](v1/test_workflow.py#L100) | [tests](v2/test_workflow.py) |
-| 3 | workflow | Workflow Execution/Run Timeouts | [workflow](workflow.py#L62) · [test (auto-skip, no sleep)](v1/test_workflow.py#L146) | [tests](v2/test_workflow.py) |
-| 4 | workflow | Workflow Start Delay | [workflow](workflow.py#L79) · [test](v1/test_workflow.py#L168) | [tests](v2/test_workflow.py) |
-| 5 | workflow | Activity Retry | [workflow](workflow.py#L88) · [test](v1/test_workflow.py#L186) | [tests](v2/test_workflow.py) |
-| 6 | workflow | Cron | [workflow](workflow.py#L108) · [test using sleep](v1/test_workflow.py#L232) | [tests](v2/test_workflow.py) |
-| 7 | scheduler | Scheduler | ❌ Schedules API not supported in the SDK testing server | Python SDK not covered yet; server only |
-| 8 | SAA | Retry, Timeout, Start Delay | ❌ SAA not supported in the SDK testing server | Not covered by the v1 migration |
-| 9 | workflow | wait for condition/signals/updates | [workflow](workflow.py#L129) · [test using sleep](v1/test_workflow.py#L274) | [tests](v2/test_workflow.py) |
+| # | Execution Type | Feature | V1 Example | V2 Testing Env | V2 Direct API |
+|---|---------------|---------|------------|----------------|---------------|
+| 1 | workflow | User Timers | [workflow](workflow.py#L14) · [test](v1/test_workflow.py#L50) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
+| 2 | workflow | Workflow Retry | [workflow](workflow.py#L59) · [test](v1/test_workflow.py#L100) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
+| 3 | workflow | Workflow Execution/Run Timeouts | [workflow](workflow.py#L62) · [test (auto-skip, no sleep)](v1/test_workflow.py#L146) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
+| 4 | workflow | Workflow Start Delay | [workflow](workflow.py#L79) · [test](v1/test_workflow.py#L168) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
+| 5 | workflow | Activity Retry | [workflow](workflow.py#L88) · [test](v1/test_workflow.py#L186) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
+| 6 | workflow | Cron | [workflow](workflow.py#L108) · [test using sleep](v1/test_workflow.py#L232) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
+| 7 | scheduler | Scheduler | ❌ Schedules API not supported in the SDK testing server | Python SDK not covered yet; server only | Python SDK not covered yet; server only |
+| 8 | SAA | Retry, Timeout, Start Delay | ❌ SAA not supported in the SDK testing server | Not covered by the v1 migration | Not covered by the v1 migration |
+| 9 | workflow | wait for condition/signals/updates | [workflow](workflow.py#L129) · [test using sleep](v1/test_workflow.py#L274) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
+
+Both V2 columns use the same parameterized tests: `environment` selects Testing Env and `time-skipper` selects Direct API ([fixture](v2/conftest.py#L29)).
 
 > v1: SDK testing server · v2: per-workflow time skipping on a compatible Temporal OSS server or Cloud namespace.
 
