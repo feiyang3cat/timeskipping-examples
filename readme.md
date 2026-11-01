@@ -22,7 +22,7 @@ This repo contains examples of time-skipping best practices in testing, along wi
 
 ### By Features
 
-| # | Execution Type | Feature | V1 Example | V2 Testing Env | V2 Direct API |
+| # | Execution Type | Feature | V1 Local Testing Server | V2 Testing Env | V2 Direct API |
 |---|---------------|---------|------------|----------------|---------------|
 | 1 | workflow | User Timers | [workflow](workflow.py#L14) · [test](v1/test_workflow.py#L50) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
 | 2 | workflow | Workflow Retry | [workflow](workflow.py#L59) · [test](v1/test_workflow.py#L100) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
