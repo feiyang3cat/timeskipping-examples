@@ -18,28 +18,6 @@ This repo contains examples of time-skipping best practices in testing, along wi
     - Sleep with retries and cron
     - Sleep for interactions: single workflow, workflow with child workflows
 
-## V1: Java testing server
-
-## V2: two ways to use the new Python SDK
-
-V2 provides per-workflow time skipping through two usage modes:
-
-| Mode | Entry point | Server lifecycle |
-| --- | --- | --- |
-| **1. New workflow environment** | `WorkflowEnvironment.start_time_skipping_v2(...)` | Starts and stops a local Temporal dev server for the test. Use `env.client` and `env.fast_forward(handle, duration)`. |
-| **2. Direct API client** | `Client.connect(...)` + `TimeSkipper(client)` | Connects directly to an existing server, without creating a workflow environment. Use `skipper.client` and `skipper.fast_forward(handle, duration)`. |
-
-`TimeSkipper` is the SDK's client-side helper for the direct API client mode.
-Both modes use the same server-side time-skipping APIs and independent workflow
-clocks. The test suite runs every V2 scenario through both modes; it starts a
-local server as test infrastructure for the direct client mode as well.
-
-The local CLI must be built from
-[`temporalio/cli`'s `fx/time-skipping-cli` branch](https://github.com/temporalio/cli/tree/fx/time-skipping-cli).
-The CLI used to validate all 40 V2 test cases was commit
-[`440c1da397ae4520b3d8a25b44515b26028dc54a`](https://github.com/temporalio/cli/commit/440c1da397ae4520b3d8a25b44515b26028dc54a)
-(Server `1.33.0`). See [V2 setup and usage examples](v2/README.md).
-
 ## Examples
 
 ### By Features
