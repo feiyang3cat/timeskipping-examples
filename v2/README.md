@@ -24,8 +24,16 @@ missing. Both entry points run against an ephemeral local server.
 Each test has a 60-second wall-clock timeout so missing time skipping fails visibly.
 The manual **Tests V2** GitHub Actions workflow checks out the latest
 `fx/time-skipping-cli` branch, builds it, and runs the same suite.
-Local validation used CLI commit `440c1da397ae4520b3d8a25b44515b26028dc54a`
-from this branch (Server `1.33.0`).
+All 40 V2 test cases passed with this CLI build:
+
+- Repository: [temporalio/cli](https://github.com/temporalio/cli)
+- Branch: [`fx/time-skipping-cli`](https://github.com/temporalio/cli/tree/fx/time-skipping-cli)
+- Tested commit: [`440c1da397ae4520b3d8a25b44515b26028dc54a`](https://github.com/temporalio/cli/commit/440c1da397ae4520b3d8a25b44515b26028dc54a)
+- Reported server version: `1.33.0`
+
+To reproduce that exact CLI build, run `git checkout 440c1da397ae4520b3d8a25b44515b26028dc54a`
+in the cloned CLI repository before `go build`. The branch and CI may advance
+beyond this tested commit.
 
 ## Two ways to use V2
 

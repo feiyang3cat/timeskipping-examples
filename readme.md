@@ -34,7 +34,9 @@ local server as test infrastructure for the direct client mode as well.
 
 The local CLI must be built from
 [`temporalio/cli`'s `fx/time-skipping-cli` branch](https://github.com/temporalio/cli/tree/fx/time-skipping-cli).
-See [V2 setup and usage examples](v2/README.md).
+The CLI used to validate all 40 V2 test cases was commit
+[`440c1da397ae4520b3d8a25b44515b26028dc54a`](https://github.com/temporalio/cli/commit/440c1da397ae4520b3d8a25b44515b26028dc54a)
+(Server `1.33.0`). See [V2 setup and usage examples](v2/README.md).
 
 ## Examples
 
