@@ -11,5 +11,10 @@
   "python.analysis.extraPaths": [
     "${workspaceFolder}/..",
     "${workspaceFolder}"
-  ]
+  ],
+  "python.terminal.launchArgs": [
+    "-m",
+    "pytest"
+  ],
+  "python.terminal.executeInFileDir": true
 }

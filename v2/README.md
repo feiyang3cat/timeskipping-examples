@@ -46,8 +46,10 @@ Opening the repository folder defaults Test Explorer to V2. Select
 `v2/.venv/bin/python` with **Python: Select Interpreter** if VS Code previously
 selected another environment, then refresh Test Explorer and run the tests.
 Select the executable `v2/.venv/bin/python`, not the `.venv` directory.
-Use the run icon next to a test function or Test Explorer; **Run Python File**
-executes the file as a script and does not run pytest tests.
+Use the run icon next to a test function or Test Explorer. This workspace also
+configures **Run Python File** to invoke `python -m pytest <file>` so the normal
+run button works for test files. After changing these settings, reload VS Code
+and create a new terminal so the local `.env` is loaded.
 
 When opening the repository folder, you can also open a V2 test file and press
 **F5**, choosing **V2: Run current test file (pytest)**. The launch configuration

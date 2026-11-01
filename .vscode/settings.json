@@ -13,5 +13,11 @@
   "python.analysis.extraPaths": [
     "${workspaceFolder}",
     "${workspaceFolder}/v2"
-  ]
+  ],
+  "python.terminal.useEnvFile": true,
+  "python.terminal.launchArgs": [
+    "-m",
+    "pytest"
+  ],
+  "python.terminal.executeInFileDir": true
 }
