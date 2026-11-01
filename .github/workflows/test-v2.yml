@@ -1,0 +1,37 @@
+name: Tests V2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-v2:
+    name: v2 (both Python APIs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out CLI time-skipping branch
+        uses: actions/checkout@v4
+        with:
+          repository: temporalio/cli
+          ref: fx/time-skipping-cli
+          path: .temporal-cli
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .temporal-cli/go.mod
+          cache-dependency-path: .temporal-cli/go.sum
+      - name: Build CLI
+        working-directory: .temporal-cli
+        run: go build -mod=readonly -o "$RUNNER_TEMP/temporal-time-skipping" ./cmd/temporal
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - name: Install SDK native build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Run v2 tests
+        env:
+          TEMPORAL_CLI_PATH: ${{ runner.temp }}/temporal-time-skipping
+        run: uv run --locked --directory v2 pytest -v
