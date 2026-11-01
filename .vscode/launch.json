@@ -28,7 +28,9 @@
         "-c",
         "${workspaceFolder}/v2/pyproject.toml",
         "test_workflow.py",
+        "test_workflow_direct_api.py",
         "test_activity_time_skipping.py",
+        "test_activity_time_skipping_direct_api.py",
         "-v"
       ],
       "cwd": "${workspaceFolder}/v2",

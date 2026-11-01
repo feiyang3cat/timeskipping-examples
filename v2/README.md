@@ -149,12 +149,12 @@ async with Worker(
 
 ### How the tests exercise both modes
 
-All 20 scenarios run twice (40 cases). The `ts_env` fixture supplies either the
-new environment (`environment`) or a `TimeSkipper` wrapping a fresh, directly
-connected client (`time-skipper`). The direct client tests share the local server
-as test infrastructure; the direct API client itself does not depend on an
-environment. These tests exercise the SDK helper, rather than hand-written
-low-level WorkflowService RPC requests.
+Each of the 20 scenarios has two separate test functions (40 tests total):
+`test_..._env` in `test_workflow.py` / `test_activity_time_skipping.py`, and
+`test_..._direct_api` in `test_workflow_direct_api.py` /
+`test_activity_time_skipping_direct_api.py`. The env tests use `env.client`;
+the direct API tests use `skipper.client`, created with `Client.connect()` and
+`TimeSkipper(client)`. The direct tests share the local server as infrastructure.
 
 Both stamp a `TimeSkippingConfig` on newly started workflows. By default skipping
 is enabled at workflow start; awaiting `result()` no longer unlocks a global clock.
@@ -172,8 +172,8 @@ against the same handle. `get_current_time(handle)` reads that workflow's clock.
 
 ## V1 coverage mapping
 
-Each row runs in both modes using the shared parameterized test:
-`pytest -k environment` selects Testing Env, and `pytest -k time-skipper` selects Direct API.
+Each row links to two separate tests:
+`pytest -k _env` selects Testing Env, and `pytest -k _direct_api` selects Direct API.
 
 The V2 suite covers all 16 V1 tests and 4 manual lock probes. It reuses the
 base workflows and activities from the repository root; activity/timer probe
@@ -182,26 +182,26 @@ For the original V1 exploration, see the [report](../manual_time_skipping_report
 
 | V1 scenario | V2 Testing Env | V2 Direct API |
 | --- | --- | --- |
-| User timer | `test_workflow.py::test_time_skipping_in_workflow_with_user_timer` | `test_workflow.py::test_time_skipping_in_workflow_with_user_timer` |
-| Parent / child user timers | `test_workflow.py::test_time_skipping_in_parent_child_workflow_with_user_timer` | `test_workflow.py::test_time_skipping_in_parent_child_workflow_with_user_timer` |
-| Workflow retry backoff | `test_workflow.py::test_workflow_retry_backoff` | `test_workflow.py::test_workflow_retry_backoff` |
-| Run timeout | `test_workflow.py::test_workflow_times_out_after_run_timeout` | `test_workflow.py::test_workflow_times_out_after_run_timeout` |
-| Execution timeout | `test_workflow.py::test_workflow_times_out_after_execution_timeout` | `test_workflow.py::test_workflow_times_out_after_execution_timeout` |
-| Start delay | `test_workflow.py::test_workflow_start_delay` | `test_workflow.py::test_workflow_start_delay` |
-| Activity retry backoff | `test_workflow.py::test_time_skipping_activity_retry_backoff` | `test_workflow.py::test_time_skipping_activity_retry_backoff` |
-| Cron | `test_workflow.py::test_cron_runs_on_schedule` | `test_workflow.py::test_cron_runs_on_schedule` |
-| Two signals at different times | `test_workflow.py::test_workflow_waiting_for_signals` | `test_workflow.py::test_workflow_waiting_for_signals` |
-| Two children + parent approval | `test_workflow.py::test_parent_with_child_and_wait_condition` | `test_workflow.py::test_parent_with_child_and_wait_condition` |
-| Child and parent signal windows | `test_workflow.py::test_parent_child_both_wait_on_condition` | `test_workflow.py::test_parent_child_both_wait_on_condition` |
-| Skip inside activity / timer race | `test_activity_time_skipping.py::test_fast_forward_in_activity_cannot_fire_user_timer` | `test_activity_time_skipping.py::test_fast_forward_in_activity_cannot_fire_user_timer` |
-| Skip while activity is running | `test_activity_time_skipping.py::test_fast_forward_blocks_while_activity_in_flight` | `test_activity_time_skipping.py::test_fast_forward_blocks_while_activity_in_flight` |
-| Two advances from activity | `test_activity_time_skipping.py::test_two_fast_forwards_from_activity_fire_timers_after_activity` | `test_activity_time_skipping.py::test_two_fast_forwards_from_activity_fire_timers_after_activity` |
-| Advance from test / held activity | `test_activity_time_skipping.py::test_fast_forward_from_test_waits_for_held_activity` | `test_activity_time_skipping.py::test_fast_forward_from_test_waits_for_held_activity` |
-| Advance / pending workflow task | `test_workflow.py::test_fast_forward_from_test_waits_for_pending_workflow_task` | `test_workflow.py::test_fast_forward_from_test_waits_for_pending_workflow_task` |
-| Manual probe 1: outside / 3 activities | `test_activity_time_skipping.py::test_1_outside_fast_forward_blocks_with_three_activities` | `test_activity_time_skipping.py::test_1_outside_fast_forward_blocks_with_three_activities` |
-| Manual probe 2: inside / generous timeout | `test_activity_time_skipping.py::test_2_inside_fast_forward_waits_for_activities` | `test_activity_time_skipping.py::test_2_inside_fast_forward_waits_for_activities` |
-| Manual probe 3: inside / short timeout | `test_activity_time_skipping.py::test_3_inside_fast_forward_cannot_force_start_to_close` | `test_activity_time_skipping.py::test_3_inside_fast_forward_cannot_force_start_to_close` |
-| Manual probe 4: inside / timer race | `test_activity_time_skipping.py::test_4_inside_fast_forward_cannot_win_user_timer_race` | `test_activity_time_skipping.py::test_4_inside_fast_forward_cannot_win_user_timer_race` |
+| User timer | [`test_time_skipping_in_workflow_with_user_timer_env`](test_workflow.py#L38) | [`test_time_skipping_in_workflow_with_user_timer_direct_api`](test_workflow_direct_api.py#L38) |
+| Parent / child user timers | [`test_time_skipping_in_parent_child_workflow_with_user_timer_env`](test_workflow.py#L62) | [`test_time_skipping_in_parent_child_workflow_with_user_timer_direct_api`](test_workflow_direct_api.py#L62) |
+| Workflow retry backoff | [`test_workflow_retry_backoff_env`](test_workflow.py#L100) | [`test_workflow_retry_backoff_direct_api`](test_workflow_direct_api.py#L100) |
+| Run timeout | [`test_workflow_times_out_after_run_timeout_env`](test_workflow.py#L138) | [`test_workflow_times_out_after_run_timeout_direct_api`](test_workflow_direct_api.py#L138) |
+| Execution timeout | [`test_workflow_times_out_after_execution_timeout_env`](test_workflow.py#L156) | [`test_workflow_times_out_after_execution_timeout_direct_api`](test_workflow_direct_api.py#L156) |
+| Start delay | [`test_workflow_start_delay_env`](test_workflow.py#L177) | [`test_workflow_start_delay_direct_api`](test_workflow_direct_api.py#L177) |
+| Activity retry backoff | [`test_time_skipping_activity_retry_backoff_env`](test_workflow.py#L206) | [`test_time_skipping_activity_retry_backoff_direct_api`](test_workflow_direct_api.py#L206) |
+| Cron | [`test_cron_runs_on_schedule_env`](test_workflow.py#L236) | [`test_cron_runs_on_schedule_direct_api`](test_workflow_direct_api.py#L236) |
+| Two signals at different times | [`test_workflow_waiting_for_signals_env`](test_workflow.py#L270) | [`test_workflow_waiting_for_signals_direct_api`](test_workflow_direct_api.py#L270) |
+| Two children + parent approval | [`test_parent_with_child_and_wait_condition_env`](test_workflow.py#L290) | [`test_parent_with_child_and_wait_condition_direct_api`](test_workflow_direct_api.py#L290) |
+| Child and parent signal windows | [`test_parent_child_both_wait_on_condition_env`](test_workflow.py#L314) | [`test_parent_child_both_wait_on_condition_direct_api`](test_workflow_direct_api.py#L314) |
+| Skip inside activity / timer race | [`test_fast_forward_in_activity_cannot_fire_user_timer_env`](test_activity_time_skipping.py#L31) | [`test_fast_forward_in_activity_cannot_fire_user_timer_direct_api`](test_activity_time_skipping_direct_api.py#L31) |
+| Skip while activity is running | [`test_fast_forward_blocks_while_activity_in_flight_env`](test_activity_time_skipping.py#L78) | [`test_fast_forward_blocks_while_activity_in_flight_direct_api`](test_activity_time_skipping_direct_api.py#L78) |
+| Two advances from activity | [`test_two_fast_forwards_from_activity_fire_timers_after_activity_env`](test_activity_time_skipping.py#L182) | [`test_two_fast_forwards_from_activity_fire_timers_after_activity_direct_api`](test_activity_time_skipping_direct_api.py#L184) |
+| Advance from test / held activity | [`test_fast_forward_from_test_waits_for_held_activity_env`](test_activity_time_skipping.py#L186) | [`test_fast_forward_from_test_waits_for_held_activity_direct_api`](test_activity_time_skipping_direct_api.py#L190) |
+| Advance / pending workflow task | [`test_fast_forward_from_test_waits_for_pending_workflow_task_env`](test_workflow.py#L342) | [`test_fast_forward_from_test_waits_for_pending_workflow_task_direct_api`](test_workflow_direct_api.py#L342) |
+| Manual probe 1: outside / 3 activities | [`test_1_outside_fast_forward_blocks_with_three_activities_env`](test_activity_time_skipping.py#L250) | [`test_1_outside_fast_forward_blocks_with_three_activities_direct_api`](test_activity_time_skipping_direct_api.py#L256) |
+| Manual probe 2: inside / generous timeout | [`test_2_inside_fast_forward_waits_for_activities_env`](test_activity_time_skipping.py#L261) | [`test_2_inside_fast_forward_waits_for_activities_direct_api`](test_activity_time_skipping_direct_api.py#L267) |
+| Manual probe 3: inside / short timeout | [`test_3_inside_fast_forward_cannot_force_start_to_close_env`](test_activity_time_skipping.py#L272) | [`test_3_inside_fast_forward_cannot_force_start_to_close_direct_api`](test_activity_time_skipping_direct_api.py#L278) |
+| Manual probe 4: inside / timer race | [`test_4_inside_fast_forward_cannot_win_user_timer_race_env`](test_activity_time_skipping.py#L284) | [`test_4_inside_fast_forward_cannot_win_user_timer_race_direct_api`](test_activity_time_skipping_direct_api.py#L290) |
 
 The four manual probes are included in the default V2 suite.
 Schedules and standalone activities have no V1 tests; they are outside this

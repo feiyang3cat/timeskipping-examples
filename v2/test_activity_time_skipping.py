@@ -1,4 +1,4 @@
-"""V1 activity races and manual lock probes under V2 semantics.
+"""Activity races and manual lock probes using V2 Testing Env.
 
 V2 fast-forward cannot bypass in-flight activities. A call from an activity
 must run in a separate task: awaiting it inline prevents the activity from
@@ -28,7 +28,7 @@ async def assert_blocked(task):
         await asyncio.wait_for(asyncio.shield(task), 0.3)
 
 
-async def test_fast_forward_in_activity_cannot_fire_user_timer(ts_env):
+async def test_fast_forward_in_activity_cannot_fire_user_timer_env(env):
     ready = asyncio.Event()
     requested = asyncio.Event()
     release = asyncio.Event()
@@ -39,7 +39,7 @@ async def test_fast_forward_in_activity_cannot_fire_user_timer(ts_env):
     async def slow_dummy(name: str, activity_duration=timedelta()) -> str:
         await ready.wait()
         forwards.append(
-            asyncio.create_task(ts_env.fast_forward(handle, timedelta(minutes=11)))
+            asyncio.create_task(env.fast_forward(handle, timedelta(minutes=11)))
         )
         requested.set()
         await release.wait()
@@ -48,13 +48,13 @@ async def test_fast_forward_in_activity_cannot_fire_user_timer(ts_env):
     task_queue = f"tq-race-{uuid4()}"
     try:
         async with Worker(
-            ts_env.client,
+            env.client,
             task_queue=task_queue,
             workflows=[WorkflowRacingActivityAndTimer],
             activities=[slow_dummy],
         ):
-            with ts_env.with_time_skipping_disabled():
-                handle = await ts_env.client.start_workflow(
+            with env.with_time_skipping_disabled():
+                handle = await env.client.start_workflow(
                     WorkflowRacingActivityAndTimer.run,
                     args=[600.0, 1800.0],
                     id=f"wf-{uuid4()}",
@@ -75,7 +75,7 @@ async def test_fast_forward_in_activity_cannot_fire_user_timer(ts_env):
         await asyncio.gather(*forwards, return_exceptions=True)
 
 
-async def test_fast_forward_blocks_while_activity_in_flight(ts_env):
+async def test_fast_forward_blocks_while_activity_in_flight_env(env):
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -87,24 +87,24 @@ async def test_fast_forward_blocks_while_activity_in_flight(ts_env):
 
     task_queue = f"tq-held-{uuid4()}"
     async with Worker(
-        ts_env.client,
+        env.client,
         task_queue=task_queue,
         workflows=[WorkflowRunningLongActivity],
         activities=[held_dummy],
     ):
-        with ts_env.with_time_skipping_disabled():
-            handle = await ts_env.client.start_workflow(
+        with env.with_time_skipping_disabled():
+            handle = await env.client.start_workflow(
                 WorkflowRunningLongActivity.run,
                 id=f"wf-{uuid4()}",
                 task_queue=task_queue,
             )
         await started.wait()
-        start = await ts_env.get_current_time(handle)
+        start = await env.get_current_time(handle)
         wall = time.monotonic()
-        forward = asyncio.create_task(ts_env.fast_forward(handle, 3.0))
+        forward = asyncio.create_task(env.fast_forward(handle, 3.0))
         try:
             await assert_blocked(forward)
-            elapsed = await ts_env.get_current_time(handle) - start
+            elapsed = await env.get_current_time(handle) - start
             assert elapsed.total_seconds() < 3.0
         finally:
             release.set()
@@ -113,7 +113,7 @@ async def test_fast_forward_blocks_while_activity_in_flight(ts_env):
         assert time.monotonic() - wall < 3.0
 
 
-async def run_two_timer_probe(ts_env, *, inside):
+async def run_two_timer_probe(env, *, inside):
     ready = asyncio.Event()
     started = asyncio.Event()
     release = asyncio.Event()
@@ -126,7 +126,7 @@ async def run_two_timer_probe(ts_env, *, inside):
         await ready.wait()
         if inside:
             forwards.append(
-                asyncio.create_task(ts_env.fast_forward(handle, timedelta(hours=1)))
+                asyncio.create_task(env.fast_forward(handle, timedelta(hours=1)))
             )
         started.set()
         await release.wait()
@@ -135,13 +135,13 @@ async def run_two_timer_probe(ts_env, *, inside):
     task_queue = f"tq-two-timers-{uuid4()}"
     try:
         async with Worker(
-            ts_env.client,
+            env.client,
             task_queue=task_queue,
             workflows=[WorkflowWithTwoTimersAndActivity],
             activities=[held],
         ):
-            with ts_env.with_time_skipping_disabled():
-                handle = await ts_env.client.start_workflow(
+            with env.with_time_skipping_disabled():
+                handle = await env.client.start_workflow(
                     WorkflowWithTwoTimersAndActivity.run,
                     args=[3600.0, 7200.0, 10800.0],
                     id=f"wf-{uuid4()}",
@@ -154,7 +154,7 @@ async def run_two_timer_probe(ts_env, *, inside):
             await started.wait()
             if not inside:
                 forwards.append(
-                    asyncio.create_task(ts_env.fast_forward(handle, timedelta(hours=1)))
+                    asyncio.create_task(env.fast_forward(handle, timedelta(hours=1)))
                 )
             try:
                 await assert_blocked(forwards[0])
@@ -164,7 +164,7 @@ async def run_two_timer_probe(ts_env, *, inside):
             # Both calls accumulate, but only after the activity releases its work.
             # The target coincides with timer2 and workflow completion. Either
             # transition can be observed first; verify the actual timer order.
-            await ts_env.fast_forward(handle, timedelta(hours=1))
+            await env.fast_forward(handle, timedelta(hours=1))
             assert await result == [
                 ["activity", 0],
                 ["timer1", 1],
@@ -179,16 +179,16 @@ async def run_two_timer_probe(ts_env, *, inside):
         await asyncio.gather(*forwards, return_exceptions=True)
 
 
-async def test_two_fast_forwards_from_activity_fire_timers_after_activity(ts_env):
-    await run_two_timer_probe(ts_env, inside=True)
+async def test_two_fast_forwards_from_activity_fire_timers_after_activity_env(env):
+    await run_two_timer_probe(env, inside=True)
 
 
-async def test_fast_forward_from_test_waits_for_held_activity(ts_env):
+async def test_fast_forward_from_test_waits_for_held_activity_env(env):
     # Awaiting result concurrently does not let an outside caller bypass work.
-    await run_two_timer_probe(ts_env, inside=False)
+    await run_two_timer_probe(env, inside=False)
 
 
-async def run_three_activity_probe(ts_env, *, inside, timeout_seconds, race=False):
+async def run_three_activity_probe(env, *, inside, timeout_seconds, race=False):
     ready = asyncio.Event()
     release = asyncio.Event()
     started = asyncio.Event()
@@ -204,7 +204,7 @@ async def run_three_activity_probe(ts_env, *, inside, timeout_seconds, race=Fals
             # Concurrent fast-forwards on ONE workflow override each other;
             # one activity drives the workflow while all three remain in flight.
             forwards.append(
-                asyncio.create_task(ts_env.fast_forward(handle, timedelta(hours=1)))
+                asyncio.create_task(env.fast_forward(handle, timedelta(hours=1)))
             )
         count += 1
         if count == 3:
@@ -216,13 +216,13 @@ async def run_three_activity_probe(ts_env, *, inside, timeout_seconds, race=Fals
     task_queue = f"tq-three-{uuid4()}"
     try:
         async with Worker(
-            ts_env.client,
+            env.client,
             task_queue=task_queue,
             workflows=[workflow_cls],
             activities=[held],
         ):
-            with ts_env.with_time_skipping_disabled():
-                handle = await ts_env.client.start_workflow(
+            with env.with_time_skipping_disabled():
+                handle = await env.client.start_workflow(
                     workflow_cls.run,
                     args=[600.0, timeout_seconds] if race else [timeout_seconds],
                     id=f"wf-{uuid4()}",
@@ -232,7 +232,7 @@ async def run_three_activity_probe(ts_env, *, inside, timeout_seconds, race=Fals
             await started.wait()
             if not inside:
                 forwards.append(
-                    asyncio.create_task(ts_env.fast_forward(handle, timedelta(hours=1)))
+                    asyncio.create_task(env.fast_forward(handle, timedelta(hours=1)))
                 )
             try:
                 await assert_blocked(forwards[0])
@@ -247,10 +247,10 @@ async def run_three_activity_probe(ts_env, *, inside, timeout_seconds, race=Fals
         await asyncio.gather(*forwards, return_exceptions=True)
 
 
-async def test_1_outside_fast_forward_blocks_with_three_activities(ts_env):
+async def test_1_outside_fast_forward_blocks_with_three_activities_env(env):
     assert (
         await run_three_activity_probe(
-            ts_env,
+            env,
             inside=False,
             timeout_seconds=30.0,
         )
@@ -258,10 +258,10 @@ async def test_1_outside_fast_forward_blocks_with_three_activities(ts_env):
     )
 
 
-async def test_2_inside_fast_forward_waits_for_activities(ts_env):
+async def test_2_inside_fast_forward_waits_for_activities_env(env):
     assert (
         await run_three_activity_probe(
-            ts_env,
+            env,
             inside=True,
             timeout_seconds=7200.0,
         )
@@ -269,11 +269,11 @@ async def test_2_inside_fast_forward_waits_for_activities(ts_env):
     )
 
 
-async def test_3_inside_fast_forward_cannot_force_start_to_close(ts_env):
+async def test_3_inside_fast_forward_cannot_force_start_to_close_env(env):
     # A 1h target cannot force the 30s timeout while activities are in flight.
     assert (
         await run_three_activity_probe(
-            ts_env,
+            env,
             inside=True,
             timeout_seconds=30.0,
         )
@@ -281,10 +281,10 @@ async def test_3_inside_fast_forward_cannot_force_start_to_close(ts_env):
     )
 
 
-async def test_4_inside_fast_forward_cannot_win_user_timer_race(ts_env):
+async def test_4_inside_fast_forward_cannot_win_user_timer_race_env(env):
     assert (
         await run_three_activity_probe(
-            ts_env,
+            env,
             inside=True,
             timeout_seconds=1800.0,
             race=True,

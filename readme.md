@@ -24,17 +24,17 @@ This repo contains examples of time-skipping best practices in testing, along wi
 
 | # | Execution Type | Feature | V1 Local Testing Server | V2 Testing Env | V2 Direct API |
 |---|---------------|---------|------------|----------------|---------------|
-| 1 | workflow | User Timers | [workflow](workflow.py#L14) · [test](v1/test_workflow.py#L50) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
-| 2 | workflow | Workflow Retry | [workflow](workflow.py#L59) · [test](v1/test_workflow.py#L100) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
-| 3 | workflow | Workflow Execution/Run Timeouts | [workflow](workflow.py#L62) · [test (auto-skip, no sleep)](v1/test_workflow.py#L146) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
-| 4 | workflow | Workflow Start Delay | [workflow](workflow.py#L79) · [test](v1/test_workflow.py#L168) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
-| 5 | workflow | Activity Retry | [workflow](workflow.py#L88) · [test](v1/test_workflow.py#L186) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
-| 6 | workflow | Cron | [workflow](workflow.py#L108) · [test using sleep](v1/test_workflow.py#L232) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
+| 1 | workflow | User Timers | [workflow](workflow.py#L14) · [test](v1/test_workflow.py#L50) | [test](v2/test_workflow.py#L38) | [test](v2/test_workflow_direct_api.py#L38) |
+| 2 | workflow | Workflow Retry | [workflow](workflow.py#L59) · [test](v1/test_workflow.py#L100) | [test](v2/test_workflow.py#L100) | [test](v2/test_workflow_direct_api.py#L100) |
+| 3 | workflow | Workflow Execution/Run Timeouts | [workflow](workflow.py#L62) · [test (auto-skip, no sleep)](v1/test_workflow.py#L146) | [test](v2/test_workflow.py#L138) · [test](v2/test_workflow.py#L156) | [test](v2/test_workflow_direct_api.py#L138) · [test](v2/test_workflow_direct_api.py#L156) |
+| 4 | workflow | Workflow Start Delay | [workflow](workflow.py#L79) · [test](v1/test_workflow.py#L168) | [test](v2/test_workflow.py#L177) | [test](v2/test_workflow_direct_api.py#L177) |
+| 5 | workflow | Activity Retry | [workflow](workflow.py#L88) · [test](v1/test_workflow.py#L186) | [test](v2/test_workflow.py#L206) | [test](v2/test_workflow_direct_api.py#L206) |
+| 6 | workflow | Cron | [workflow](workflow.py#L108) · [test using sleep](v1/test_workflow.py#L232) | [test](v2/test_workflow.py#L236) | [test](v2/test_workflow_direct_api.py#L236) |
 | 7 | scheduler | Scheduler | ❌ Schedules API not supported in the SDK testing server | Python SDK not covered yet; server only | Python SDK not covered yet; server only |
 | 8 | SAA | Retry, Timeout, Start Delay | ❌ SAA not supported in the SDK testing server | Not covered by the v1 migration | Not covered by the v1 migration |
-| 9 | workflow | wait for condition/signals/updates | [workflow](workflow.py#L129) · [test using sleep](v1/test_workflow.py#L274) | [tests](v2/test_workflow.py) | [tests](v2/test_workflow.py) |
+| 9 | workflow | wait for condition/signals/updates | [workflow](workflow.py#L129) · [test using sleep](v1/test_workflow.py#L274) | [test](v2/test_workflow.py#L270) | [test](v2/test_workflow_direct_api.py#L270) |
 
-Both V2 columns use the same parameterized tests: `environment` selects Testing Env and `time-skipper` selects Direct API ([fixture](v2/conftest.py#L29)).
+Each V2 column links to a separate test: Testing Env uses `env`, and Direct API uses `skipper` ([fixtures](v2/conftest.py)).
 
 > v1: SDK testing server · v2: per-workflow time skipping on a compatible Temporal OSS server or Cloud namespace.
 

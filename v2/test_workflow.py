@@ -1,4 +1,4 @@
-"""V1 scenarios rewritten for per-workflow V2 clocks, through both APIs."""
+"""V1 scenarios using V2 Testing Env."""
 
 import asyncio
 import logging
@@ -12,7 +12,7 @@ from temporalio.client import WorkflowFailureError
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ApplicationError
 from temporalio.exceptions import TimeoutError as TemporalTimeoutError
-from temporalio.testing import TimeSkipper, WorkflowEnvironment
+from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 from workflow import (
     ChildA,
@@ -35,11 +35,11 @@ logger = logging.getLogger(__name__)
 # --- Scenario 1: User Timers ---
 
 
-async def test_time_skipping_in_workflow_with_user_timer(
-    ts_env: WorkflowEnvironment | TimeSkipper,
+async def test_time_skipping_in_workflow_with_user_timer_env(
+    env: WorkflowEnvironment,
 ):
     task_queue = f"tq-wf-with-user-timer-{uuid4()}"
-    client = ts_env.client
+    client = env.client
     worker = Worker(
         client,
         task_queue=task_queue,
@@ -59,11 +59,11 @@ async def test_time_skipping_in_workflow_with_user_timer(
         logger.info(f"Workflow completed in {delta.total_seconds() / 3600:.2f} hours")
 
 
-async def test_time_skipping_in_parent_child_workflow_with_user_timer(
-    ts_env: WorkflowEnvironment | TimeSkipper,
+async def test_time_skipping_in_parent_child_workflow_with_user_timer_env(
+    env: WorkflowEnvironment,
 ):
     task_queue = f"tq-parent-child-wf-with-user-timer-{uuid4()}"
-    client = ts_env.client
+    client = env.client
     worker = Worker(
         client,
         task_queue=task_queue,
@@ -97,7 +97,7 @@ async def test_time_skipping_in_parent_child_workflow_with_user_timer(
 # --- Scenario 2: Workflow Retry ---
 
 
-async def test_workflow_retry_backoff(ts_env: WorkflowEnvironment | TimeSkipper):
+async def test_workflow_retry_backoff_env(env: WorkflowEnvironment):
     task_queue = f"tq-wf-retry-{uuid4()}"
     calls = []
 
@@ -109,13 +109,13 @@ async def test_workflow_retry_backoff(ts_env: WorkflowEnvironment | TimeSkipper)
         return f"done {name}"
 
     async with Worker(
-        ts_env.client,
+        env.client,
         task_queue=task_queue,
         workflows=[ThisWorkflowRunsWithCronOrRetry],
         activities=[dummy_activity_fail_once],
     ):
         time_start = datetime.now(timezone.utc)
-        handle = await ts_env.client.start_workflow(
+        handle = await env.client.start_workflow(
             ThisWorkflowRunsWithCronOrRetry.run,
             id=f"wf-{uuid4()}",
             task_queue=task_queue,
@@ -126,7 +126,7 @@ async def test_workflow_retry_backoff(ts_env: WorkflowEnvironment | TimeSkipper)
             ),
         )
         await handle.result()
-        time_end = await ts_env.get_current_time(handle)
+        time_end = await env.get_current_time(handle)
 
     assert len(calls) == 2
     assert time_end - time_start >= timedelta(hours=1)
@@ -135,14 +135,14 @@ async def test_workflow_retry_backoff(ts_env: WorkflowEnvironment | TimeSkipper)
 # --- Scenario 3: Workflow Execution/Run Timeout ---
 
 
-async def test_workflow_times_out_after_run_timeout(
-    ts_env: WorkflowEnvironment | TimeSkipper,
+async def test_workflow_times_out_after_run_timeout_env(
+    env: WorkflowEnvironment,
 ):
     task_queue = f"tq-run-timeout-{uuid4()}"
     async with Worker(
-        ts_env.client, task_queue=task_queue, workflows=[WaitForSignalWorkflow]
+        env.client, task_queue=task_queue, workflows=[WaitForSignalWorkflow]
     ):
-        handle = await ts_env.client.start_workflow(
+        handle = await env.client.start_workflow(
             WaitForSignalWorkflow.run,
             id=f"wf-{uuid4()}",
             task_queue=task_queue,
@@ -153,14 +153,14 @@ async def test_workflow_times_out_after_run_timeout(
     assert isinstance(exc_info.value.cause, TemporalTimeoutError)
 
 
-async def test_workflow_times_out_after_execution_timeout(
-    ts_env: WorkflowEnvironment | TimeSkipper,
+async def test_workflow_times_out_after_execution_timeout_env(
+    env: WorkflowEnvironment,
 ):
     task_queue = f"tq-execution-timeout-{uuid4()}"
     async with Worker(
-        ts_env.client, task_queue=task_queue, workflows=[WaitForSignalWorkflow]
+        env.client, task_queue=task_queue, workflows=[WaitForSignalWorkflow]
     ):
-        handle = await ts_env.client.start_workflow(
+        handle = await env.client.start_workflow(
             WaitForSignalWorkflow.run,
             id=f"wf-{uuid4()}",
             task_queue=task_queue,
@@ -174,13 +174,13 @@ async def test_workflow_times_out_after_execution_timeout(
 # --- Scenario 4: Workflow Start Delay ---
 
 
-async def test_workflow_start_delay(ts_env: WorkflowEnvironment | TimeSkipper):
+async def test_workflow_start_delay_env(env: WorkflowEnvironment):
     task_queue = f"tq-start-delay-{uuid4()}"
     async with Worker(
-        ts_env.client, task_queue=task_queue, workflows=[WorkflowWithStartDelay]
+        env.client, task_queue=task_queue, workflows=[WorkflowWithStartDelay]
     ):
         time_start = datetime.now(timezone.utc)
-        result = await ts_env.client.execute_workflow(
+        result = await env.client.execute_workflow(
             WorkflowWithStartDelay.run,
             id=f"wf-{uuid4()}",
             task_queue=task_queue,
@@ -203,11 +203,11 @@ async def retry_activity_mocked() -> int:
         return activity.info().attempt
 
 
-async def test_time_skipping_activity_retry_backoff(
-    ts_env: WorkflowEnvironment | TimeSkipper,
+async def test_time_skipping_activity_retry_backoff_env(
+    env: WorkflowEnvironment,
 ):
     task_queue = f"tq-retry-{uuid4()}"
-    client = ts_env.client
+    client = env.client
     worker = Worker(
         client,
         task_queue=task_queue,
@@ -233,7 +233,7 @@ async def test_time_skipping_activity_retry_backoff(
 # --- Scenario 6: Cron ---
 
 
-async def test_cron_runs_on_schedule(ts_env):
+async def test_cron_runs_on_schedule_env(env):
     calls = []
 
     @activity.defn(name="dummy_activity")
@@ -243,22 +243,22 @@ async def test_cron_runs_on_schedule(ts_env):
 
     task_queue = f"tq-cron-{uuid4()}"
     async with Worker(
-        ts_env.client,
+        env.client,
         task_queue=task_queue,
         workflows=[ThisWorkflowRunsWithCronOrRetry],
         activities=[counting_dummy],
     ):
-        with ts_env.with_time_skipping_disabled():
-            handle = await ts_env.client.start_workflow(
+        with env.with_time_skipping_disabled():
+            handle = await env.client.start_workflow(
                 ThisWorkflowRunsWithCronOrRetry.run,
                 id=f"cron-{uuid4()}",
                 task_queue=task_queue,
                 cron_schedule="0 9 * * *",
             )
-        start = await ts_env.get_current_time(handle)
+        start = await env.get_current_time(handle)
         try:
-            assert await ts_env.fast_forward(handle, timedelta(days=3))
-            assert await ts_env.get_current_time(handle) - start >= timedelta(days=3)
+            assert await env.fast_forward(handle, timedelta(days=3))
+            assert await env.get_current_time(handle) - start >= timedelta(days=3)
             assert len(calls) >= 3
         finally:
             await handle.terminate()
@@ -267,97 +267,97 @@ async def test_cron_runs_on_schedule(ts_env):
 # --- Scenario 9: Interactions at controlled virtual times ---
 
 
-async def test_workflow_waiting_for_signals(ts_env):
+async def test_workflow_waiting_for_signals_env(env):
     task_queue = f"tq-signals-{uuid4()}"
     async with Worker(
-        ts_env.client, task_queue=task_queue, workflows=[WorkflowWaitingForSignals]
+        env.client, task_queue=task_queue, workflows=[WorkflowWaitingForSignals]
     ):
-        with ts_env.with_time_skipping_disabled():
-            handle = await ts_env.client.start_workflow(
+        with env.with_time_skipping_disabled():
+            handle = await env.client.start_workflow(
                 WorkflowWaitingForSignals.run,
                 id=f"wf-{uuid4()}",
                 task_queue=task_queue,
             )
-        start = await ts_env.get_current_time(handle)
-        assert await ts_env.fast_forward(handle, timedelta(minutes=30))
+        start = await env.get_current_time(handle)
+        assert await env.fast_forward(handle, timedelta(minutes=30))
         await handle.signal(WorkflowWaitingForSignals.prepare_done)
-        assert await ts_env.get_current_time(handle) - start >= timedelta(minutes=30)
-        assert await ts_env.fast_forward(handle, timedelta(minutes=30))
+        assert await env.get_current_time(handle) - start >= timedelta(minutes=30)
+        assert await env.fast_forward(handle, timedelta(minutes=30))
         await handle.signal(WorkflowWaitingForSignals.go)
         assert await handle.result() is True
 
 
-async def test_parent_with_child_and_wait_condition(ts_env):
+async def test_parent_with_child_and_wait_condition_env(env):
     task_queue = f"tq-parent-{uuid4()}"
     async with Worker(
-        ts_env.client,
+        env.client,
         task_queue=task_queue,
         workflows=[ParentWithChildAndWaitCondition, ChildA, ChildB],
     ):
-        with ts_env.with_time_skipping_disabled():
-            handle = await ts_env.client.start_workflow(
+        with env.with_time_skipping_disabled():
+            handle = await env.client.start_workflow(
                 ParentWithChildAndWaitCondition.run,
                 id=f"wf-{uuid4()}",
                 task_queue=task_queue,
             )
-        start = await ts_env.get_current_time(handle)
+        start = await env.get_current_time(handle)
         # Children each skip their own 1h/2h. Only the parent's 1h cooldown
         # and half of its 1h approval window count on the parent's clock.
-        assert await ts_env.fast_forward(handle, timedelta(hours=1, minutes=30))
-        assert await ts_env.get_current_time(handle) - start >= timedelta(
+        assert await env.fast_forward(handle, timedelta(hours=1, minutes=30))
+        assert await env.get_current_time(handle) - start >= timedelta(
             hours=1, minutes=30
         )
         await handle.signal(ParentWithChildAndWaitCondition.approve)
         assert await handle.result() is True
 
 
-async def test_parent_child_both_wait_on_condition(ts_env):
+async def test_parent_child_both_wait_on_condition_env(env):
     task_queue = f"tq-parent-child-{uuid4()}"
     async with Worker(
-        ts_env.client,
+        env.client,
         task_queue=task_queue,
         workflows=[ParentChildBothWaitOnCondition, ChildWithCondition],
     ):
-        with ts_env.with_time_skipping_disabled():
-            handle = await ts_env.client.start_workflow(
+        with env.with_time_skipping_disabled():
+            handle = await env.client.start_workflow(
                 ParentChildBothWaitOnCondition.run,
                 id=f"wf-{uuid4()}",
                 task_queue=task_queue,
             )
         # Child clocks are independent. Reach its creation, then drive the child
         # separately to its signal window before advancing the parent again.
-        assert await ts_env.fast_forward(handle, timedelta(hours=1))
+        assert await env.fast_forward(handle, timedelta(hours=1))
         async for event in handle.fetch_history_events(wait_new_event=True):
             if event.HasField("child_workflow_execution_started_event_attributes"):
                 break
-        child = ts_env.client.get_workflow_handle(f"{handle.id}-child")
-        assert await ts_env.fast_forward(child, timedelta(minutes=30))
+        child = env.client.get_workflow_handle(f"{handle.id}-child")
+        assert await env.fast_forward(child, timedelta(minutes=30))
         await child.signal(ChildWithCondition.proceed)
         assert await child.result() is True
-        assert await ts_env.fast_forward(handle, timedelta(hours=1))
+        assert await env.fast_forward(handle, timedelta(hours=1))
         await handle.signal(ParentChildBothWaitOnCondition.proceed)
         assert await handle.result() == (True, True)
 
 
-async def test_fast_forward_from_test_waits_for_pending_workflow_task(ts_env):
+async def test_fast_forward_from_test_waits_for_pending_workflow_task_env(env):
     """V1's extra unlock could break this lock; V2 waits for a worker."""
     task_queue = f"tq-no-worker-{uuid4()}"
-    with ts_env.with_time_skipping_disabled():
-        handle = await ts_env.client.start_workflow(
+    with env.with_time_skipping_disabled():
+        handle = await env.client.start_workflow(
             WaitForSignalWorkflow.run,
             id=f"wf-{uuid4()}",
             task_queue=task_queue,
             execution_timeout=timedelta(hours=1),
         )
-    forward = asyncio.create_task(ts_env.fast_forward(handle, timedelta(minutes=30)))
+    forward = asyncio.create_task(env.fast_forward(handle, timedelta(minutes=30)))
     try:
         await asyncio.sleep(0.3)
         assert not forward.done()
         async with Worker(
-            ts_env.client, task_queue=task_queue, workflows=[WaitForSignalWorkflow]
+            env.client, task_queue=task_queue, workflows=[WaitForSignalWorkflow]
         ):
             assert await forward
-            assert not await ts_env.fast_forward(handle, timedelta(minutes=31))
+            assert not await env.fast_forward(handle, timedelta(minutes=31))
             with pytest.raises(WorkflowFailureError) as exc_info:
                 await handle.result()
             assert isinstance(exc_info.value.cause, TemporalTimeoutError)

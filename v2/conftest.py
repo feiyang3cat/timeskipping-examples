@@ -1,15 +1,16 @@
-"""Run every scenario through both public V2 time-skipping entry points."""
+"""Independent fixtures for Testing Env and Direct API tests."""
 
 import os
 from datetime import timedelta
 
 import pytest
 import pytest_asyncio
+from temporalio.client import Client
 from temporalio.testing import TimeSkipper, WorkflowEnvironment
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
-async def local_server():
+async def env():
     # The SDK's default released CLI does not include the required branch.
     path = os.environ.get("TEMPORAL_CLI_PATH")
     if not path:
@@ -26,11 +27,11 @@ async def local_server():
         yield env
 
 
-@pytest_asyncio.fixture(params=["environment", "time-skipper"])
-async def ts_env(request, local_server):
-    if request.param == "environment":
-        yield local_server
-    else:
-        # A fresh, unwrapped client, just like one connected to OSS or Cloud.
-        client = await local_server.connect_client()
-        yield TimeSkipper(client)
+@pytest_asyncio.fixture
+async def skipper(env: WorkflowEnvironment) -> TimeSkipper:
+    # The env owns the test server; this connection uses the direct client API.
+    client = await Client.connect(
+        env.client.service_client.config.target_host,
+        namespace=env.client.namespace,
+    )
+    return TimeSkipper(client)
