@@ -42,16 +42,6 @@ Sources: `temporal/api/testservice/v1/service.proto` (in the SDK's bundled proto
 
 > Note: the docstring in this file says "outside env.sleep cannot release the activities' locks". That is not accurate. The counter does not track who holds each lock; Scenario 1 fails because the start lock is still held (`result()` is not being awaited), not because the call came from outside.
 
-## Lock leak (observed in one-off experiments, not written as tests)
-
-| Situation | Result |
-|---|---|
-| Timer wins and the in-flight activity gets cancelled (9++) | That activity's lock is never released; afterwards an idle `env.sleep(3s)` takes 3 real seconds |
-| Workflow times out while its workflow task is still pending (9+++++ b) | That workflow task's lock is never released either |
-
-Impact: with the session-scoped `ts_env`, 9++ caused 9+++ to fail and 9++++ to hang. Both tests now use the function-scoped [`isolated_ts_env`](v1/test_workflow.py#L60).
-
-
 ## V2 observations and open questions
 
 The observations below come from the 40 V2 test cases (20 scenarios exercised
@@ -146,3 +136,22 @@ Passing these tests does not resolve the open questions below.
    dependency contains that fix before classifying this as a server bug or
    accepting both outcomes. The relaxed assertion does not establish correctness
    of this boundary behavior.
+
+## WIP
+
+### V1 Java testing server: suspected lock leak
+
+These are one-off observations from the legacy Java testing server started by
+`WorkflowEnvironment.start_time_skipping()`, not the V2 OSS server. They have
+not been established by dedicated lock-leak regression tests.
+
+This section was first added on **2026-10-28** in commit
+[`28fc6e2` — `add exploration of manual ts`](https://github.com/feiyang3cat/timeskipping-examples/commit/28fc6e29458bddf3d3a8836f16140e1d5b440d84).
+The exact dates of the experiments were not recorded separately.
+
+| Situation | Result |
+|---|---|
+| Timer wins and the in-flight activity gets cancelled (9++) | That activity's lock is never released; afterwards an idle `env.sleep(3s)` takes 3 real seconds |
+| Workflow times out while its workflow task is still pending (9+++++ b) | That workflow task's lock is never released either |
+
+Impact: with the session-scoped `ts_env`, 9++ caused 9+++ to fail and 9++++ to hang. Both tests now use the function-scoped [`isolated_ts_env`](v1/test_workflow.py#L60).
