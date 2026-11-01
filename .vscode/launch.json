@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "V2: Run current test file (pytest)",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/v2/.venv/bin/python",
+      "module": "pytest",
+      "args": [
+        "-c",
+        "${workspaceFolder}/v2/pyproject.toml",
+        "${file}",
+        "-v"
+      ],
+      "cwd": "${workspaceFolder}/v2",
+      "envFile": "${workspaceFolder}/v2/.env",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "V2: Run all tests (pytest)",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/v2/.venv/bin/python",
+      "module": "pytest",
+      "args": [
+        "-c",
+        "${workspaceFolder}/v2/pyproject.toml",
+        "test_workflow.py",
+        "test_activity_time_skipping.py",
+        "-v"
+      ],
+      "cwd": "${workspaceFolder}/v2",
+      "envFile": "${workspaceFolder}/v2/.env",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

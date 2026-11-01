@@ -45,6 +45,13 @@ load it automatically.
 Opening the repository folder defaults Test Explorer to V2. Select
 `v2/.venv/bin/python` with **Python: Select Interpreter** if VS Code previously
 selected another environment, then refresh Test Explorer and run the tests.
+Select the executable `v2/.venv/bin/python`, not the `.venv` directory.
+Use the run icon next to a test function or Test Explorer; **Run Python File**
+executes the file as a script and does not run pytest tests.
+
+When opening the repository folder, you can also open a V2 test file and press
+**F5**, choosing **V2: Run current test file (pytest)**. The launch configuration
+uses the V2 Python executable, pytest configuration, and `v2/.env` explicitly.
 
 To work with both versions, open `timeskipping-examples.code-workspace` with
 **File > Open Workspace from File** and run `uv sync --locked --directory v1`
