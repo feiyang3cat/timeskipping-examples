@@ -18,6 +18,8 @@ This repo contains examples of time-skipping best practices in testing, along wi
     - Sleep with retries and cron
     - Sleep for interactions: single workflow, workflow with child workflows
 
+## V1: Java testing server
+
 ## V2: two ways to use the new Python SDK
 
 V2 provides per-workflow time skipping through two usage modes:
