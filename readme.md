@@ -50,7 +50,7 @@ The CLI used to validate all 40 V2 test cases was commit
 | 4 | workflow | Workflow Start Delay | [workflow](workflow.py#L79) · [test](v1/test_workflow.py#L168) | [test](v2/test_workflow.py#L177) | [test](v2/test_workflow.py#L177) |
 | 5 | workflow | Activity Retry | [workflow](workflow.py#L88) · [test](v1/test_workflow.py#L186) | [test](v2/test_workflow.py#L206) | [test](v2/test_workflow.py#L206) |
 | 6 | workflow | Cron | [workflow](workflow.py#L108) · [test using sleep](v1/test_workflow.py#L232) | [test](v2/test_workflow.py#L236) | [test](v2/test_workflow.py#L236) |
-| 7 | scheduler | Scheduler | ❌ Schedules API not supported in the SDK testing server | Not covered | Not covered |
+| 7 | scheduler | Scheduler | ❌ Schedules API not supported in the SDK testing server | Python SDK not covered yet; server only | Python SDK not covered yet; server only |
 | 8 | SAA | Retry, Timeout, Start Delay | ❌ SAA not supported in the SDK testing server | Not covered | Not covered |
 | 9 | workflow | wait for condition/signals/updates | [workflow](workflow.py#L129) · [test using sleep](v1/test_workflow.py#L274) | [test](v2/test_workflow.py#L270) | [test](v2/test_workflow.py#L270) |
 | 10 | workflow | Skip time when there is in-flight work | [Leverage lock leaking](manual_time_skipping_report.md#verified-examples) | [Not supported in pre-release](manual_time_skipping_report.md#v2-observations-and-open-questions) | [Not supported in pre-release](manual_time_skipping_report.md#v2-observations-and-open-questions) |
