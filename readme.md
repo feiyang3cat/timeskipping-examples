@@ -22,17 +22,21 @@ This repo contains examples of time-skipping best practices in testing, along wi
 
 ### By Features
 
+Test names deliberately retain workflow class names (for example,
+`test_ParentChildWorkflowWithUserTimer`) for quick lookup rather than following
+Python's usual snake_case convention.
+
 | # | Execution Type | Feature | V1 Local Testing Server | V2 Testing Env | V2 Direct API |
 |---|---------------|---------|------------|----------------|---------------|
-| 1 | workflow | User Timers | [workflow](workflow.py#L14) · [test](v1/test_workflow.py#L50) | [test](v2/test_workflow.py#L38) | [test](v2/test_workflow_direct_api.py#L38) |
-| 2 | workflow | Workflow Retry | [workflow](workflow.py#L59) · [test](v1/test_workflow.py#L100) | [test](v2/test_workflow.py#L100) | [test](v2/test_workflow_direct_api.py#L100) |
-| 3 | workflow | Workflow Execution/Run Timeouts | [workflow](workflow.py#L62) · [test (auto-skip, no sleep)](v1/test_workflow.py#L146) | [test](v2/test_workflow.py#L138) · [test](v2/test_workflow.py#L156) | [test](v2/test_workflow_direct_api.py#L138) · [test](v2/test_workflow_direct_api.py#L156) |
-| 4 | workflow | Workflow Start Delay | [workflow](workflow.py#L79) · [test](v1/test_workflow.py#L168) | [test](v2/test_workflow.py#L177) | [test](v2/test_workflow_direct_api.py#L177) |
-| 5 | workflow | Activity Retry | [workflow](workflow.py#L88) · [test](v1/test_workflow.py#L186) | [test](v2/test_workflow.py#L206) | [test](v2/test_workflow_direct_api.py#L206) |
-| 6 | workflow | Cron | [workflow](workflow.py#L108) · [test using sleep](v1/test_workflow.py#L232) | [test](v2/test_workflow.py#L236) | [test](v2/test_workflow_direct_api.py#L236) |
+| 1 | workflow | User Timers | [workflow](workflow.py#L14) · [test](v1/test_workflow.py#L70) | [test](v2/test_workflow.py#L41) | [test](v2/test_workflow_direct_api.py#L41) |
+| 2 | workflow | Workflow Retry | [workflow](workflow.py#L59) · [test](v1/test_workflow.py#L118) | [test](v2/test_workflow.py#L103) | [test](v2/test_workflow_direct_api.py#L103) |
+| 3 | workflow | Workflow Execution/Run Timeouts | [workflow](workflow.py#L62) · [test (auto-skip, no sleep)](v1/test_workflow.py#L163) | [test](v2/test_workflow.py#L143) · [test](v2/test_workflow.py#L161) | [test](v2/test_workflow_direct_api.py#L143) · [test](v2/test_workflow_direct_api.py#L161) |
+| 4 | workflow | Workflow Start Delay | [workflow](workflow.py#L79) · [test](v1/test_workflow.py#L195) | [test](v2/test_workflow.py#L182) | [test](v2/test_workflow_direct_api.py#L182) |
+| 5 | workflow | Activity Retry | [workflow](workflow.py#L88) · [test](v1/test_workflow.py#L220) | [test](v2/test_workflow.py#L211) | [test](v2/test_workflow_direct_api.py#L211) |
+| 6 | workflow | Cron | [workflow](workflow.py#L108) · [test using sleep](v1/test_workflow.py#L245) | [test](v2/test_workflow.py#L241) | [test](v2/test_workflow_direct_api.py#L241) |
 | 7 | scheduler | Scheduler | ❌ Schedules API not supported in the SDK testing server | Python SDK not covered yet; server only | Python SDK not covered yet; server only |
 | 8 | SAA | Retry, Timeout, Start Delay | ❌ SAA not supported in the SDK testing server | Not covered by the v1 migration | Not covered by the v1 migration |
-| 9 | workflow | wait for condition/signals/updates | [workflow](workflow.py#L129) · [test using sleep](v1/test_workflow.py#L274) | [test](v2/test_workflow.py#L270) | [test](v2/test_workflow_direct_api.py#L270) |
+| 9 | workflow | wait for condition/signals/updates | [workflow](workflow.py#L129) · [test using sleep](v1/test_workflow.py#L285) | [test](v2/test_workflow.py#L275) | [test](v2/test_workflow_direct_api.py#L275) |
 
 Each V2 column links to a separate test: Testing Env uses `env`, and Direct API uses `skipper` ([fixtures](v2/conftest.py)).
 
@@ -43,8 +47,8 @@ See [v2 setup, both APIs, and the full coverage mapping](v2/README.md). All 16 V
 ### More V1 examples with `env.sleep()`
 
 #### Some complicated examples
-- parent workflow waiting on signals with timeouts: [[workflow](workflow.py#L161)] · [[test](v1/test_workflow.py#L307)]
-- parent + child, both waiting on their own signal windows: [[workflow](workflow.py#L204)] · [[test](v1/test_workflow.py#L347)]
+- parent workflow waiting on signals with timeouts: [[workflow](workflow.py#L161)] · [[test](v1/test_workflow.py#L313)]
+- parent + child, both waiting on their own signal windows: [[workflow](workflow.py#L204)] · [[test](v1/test_workflow.py#L344)]
 
 For V1 manual time-skipping exploration and lock behavior, see the [exploration report](manual_time_skipping_report.md).
 

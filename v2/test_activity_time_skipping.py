@@ -5,6 +5,9 @@ must run in a separate task: awaiting it inline prevents the activity from
 completing, which prevents time skipping. No caller can release a global lock.
 """
 
+# Test names deliberately preserve workflow class names for quick lookup,
+# instead of following Python's usual snake_case convention.
+
 import asyncio
 import time
 from datetime import timedelta
@@ -28,7 +31,7 @@ async def assert_blocked(task):
         await asyncio.wait_for(asyncio.shield(task), 0.3)
 
 
-async def test_fast_forward_in_activity_cannot_fire_user_timer_env(env):
+async def test_WorkflowRacingActivityAndTimer_fast_forward_in_activity_env(env):
     ready = asyncio.Event()
     requested = asyncio.Event()
     release = asyncio.Event()
@@ -75,7 +78,7 @@ async def test_fast_forward_in_activity_cannot_fire_user_timer_env(env):
         await asyncio.gather(*forwards, return_exceptions=True)
 
 
-async def test_fast_forward_blocks_while_activity_in_flight_env(env):
+async def test_WorkflowRunningLongActivity_fast_forward_from_test_env(env):
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -179,11 +182,11 @@ async def run_two_timer_probe(env, *, inside):
         await asyncio.gather(*forwards, return_exceptions=True)
 
 
-async def test_two_fast_forwards_from_activity_fire_timers_after_activity_env(env):
+async def test_WorkflowWithTwoTimersAndActivity_two_fast_forwards_in_activity_env(env):
     await run_two_timer_probe(env, inside=True)
 
 
-async def test_fast_forward_from_test_waits_for_held_activity_env(env):
+async def test_WorkflowWithTwoTimersAndActivity_fast_forward_from_test_env(env):
     # Awaiting result concurrently does not let an outside caller bypass work.
     await run_two_timer_probe(env, inside=False)
 
@@ -247,7 +250,7 @@ async def run_three_activity_probe(env, *, inside, timeout_seconds, race=False):
         await asyncio.gather(*forwards, return_exceptions=True)
 
 
-async def test_1_outside_fast_forward_blocks_with_three_activities_env(env):
+async def test_ThreeActivities_fast_forward_from_test_env(env):
     assert (
         await run_three_activity_probe(
             env,
@@ -258,7 +261,7 @@ async def test_1_outside_fast_forward_blocks_with_three_activities_env(env):
     )
 
 
-async def test_2_inside_fast_forward_waits_for_activities_env(env):
+async def test_ThreeActivities_fast_forward_in_activity_env(env):
     assert (
         await run_three_activity_probe(
             env,
@@ -269,7 +272,7 @@ async def test_2_inside_fast_forward_waits_for_activities_env(env):
     )
 
 
-async def test_3_inside_fast_forward_cannot_force_start_to_close_env(env):
+async def test_ThreeActivities_fast_forward_cannot_force_start_to_close_env(env):
     # A 1h target cannot force the 30s timeout while activities are in flight.
     assert (
         await run_three_activity_probe(
@@ -281,7 +284,7 @@ async def test_3_inside_fast_forward_cannot_force_start_to_close_env(env):
     )
 
 
-async def test_4_inside_fast_forward_cannot_win_user_timer_race_env(env):
+async def test_ThreeActivitiesRacedVsTimer_fast_forward_in_activity_env(env):
     assert (
         await run_three_activity_probe(
             env,

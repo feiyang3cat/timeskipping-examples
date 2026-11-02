@@ -5,6 +5,9 @@ must run in a separate task: awaiting it inline prevents the activity from
 completing, which prevents time skipping. No caller can release a global lock.
 """
 
+# Test names deliberately preserve workflow class names for quick lookup,
+# instead of following Python's usual snake_case convention.
+
 import asyncio
 import time
 from datetime import timedelta
@@ -28,7 +31,9 @@ async def assert_blocked(task):
         await asyncio.wait_for(asyncio.shield(task), 0.3)
 
 
-async def test_fast_forward_in_activity_cannot_fire_user_timer_direct_api(skipper):
+async def test_WorkflowRacingActivityAndTimer_fast_forward_in_activity_direct_api(
+    skipper,
+):
     ready = asyncio.Event()
     requested = asyncio.Event()
     release = asyncio.Event()
@@ -75,7 +80,7 @@ async def test_fast_forward_in_activity_cannot_fire_user_timer_direct_api(skippe
         await asyncio.gather(*forwards, return_exceptions=True)
 
 
-async def test_fast_forward_blocks_while_activity_in_flight_direct_api(skipper):
+async def test_WorkflowRunningLongActivity_fast_forward_from_test_direct_api(skipper):
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -181,13 +186,15 @@ async def run_two_timer_probe(skipper, *, inside):
         await asyncio.gather(*forwards, return_exceptions=True)
 
 
-async def test_two_fast_forwards_from_activity_fire_timers_after_activity_direct_api(
+async def test_WorkflowWithTwoTimersAndActivity_two_fast_forwards_in_activity_direct_api(
     skipper,
 ):
     await run_two_timer_probe(skipper, inside=True)
 
 
-async def test_fast_forward_from_test_waits_for_held_activity_direct_api(skipper):
+async def test_WorkflowWithTwoTimersAndActivity_fast_forward_from_test_direct_api(
+    skipper,
+):
     # Awaiting result concurrently does not let an outside caller bypass work.
     await run_two_timer_probe(skipper, inside=False)
 
@@ -253,7 +260,7 @@ async def run_three_activity_probe(skipper, *, inside, timeout_seconds, race=Fal
         await asyncio.gather(*forwards, return_exceptions=True)
 
 
-async def test_1_outside_fast_forward_blocks_with_three_activities_direct_api(skipper):
+async def test_ThreeActivities_fast_forward_from_test_direct_api(skipper):
     assert (
         await run_three_activity_probe(
             skipper,
@@ -264,7 +271,7 @@ async def test_1_outside_fast_forward_blocks_with_three_activities_direct_api(sk
     )
 
 
-async def test_2_inside_fast_forward_waits_for_activities_direct_api(skipper):
+async def test_ThreeActivities_fast_forward_in_activity_direct_api(skipper):
     assert (
         await run_three_activity_probe(
             skipper,
@@ -275,7 +282,9 @@ async def test_2_inside_fast_forward_waits_for_activities_direct_api(skipper):
     )
 
 
-async def test_3_inside_fast_forward_cannot_force_start_to_close_direct_api(skipper):
+async def test_ThreeActivities_fast_forward_cannot_force_start_to_close_direct_api(
+    skipper,
+):
     # A 1h target cannot force the 30s timeout while activities are in flight.
     assert (
         await run_three_activity_probe(
@@ -287,7 +296,7 @@ async def test_3_inside_fast_forward_cannot_force_start_to_close_direct_api(skip
     )
 
 
-async def test_4_inside_fast_forward_cannot_win_user_timer_race_direct_api(skipper):
+async def test_ThreeActivitiesRacedVsTimer_fast_forward_in_activity_direct_api(skipper):
     assert (
         await run_three_activity_probe(
             skipper,

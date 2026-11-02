@@ -1,5 +1,8 @@
 """V1 scenarios using V2 Direct API (TimeSkipper)."""
 
+# Test names deliberately preserve workflow class names for quick lookup,
+# instead of following Python's usual snake_case convention.
+
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
@@ -35,7 +38,7 @@ logger = logging.getLogger(__name__)
 # --- Scenario 1: User Timers ---
 
 
-async def test_time_skipping_in_workflow_with_user_timer_direct_api(
+async def test_WorkflowWithUserTimer_direct_api(
     skipper: TimeSkipper,
 ):
     task_queue = f"tq-wf-with-user-timer-{uuid4()}"
@@ -59,7 +62,7 @@ async def test_time_skipping_in_workflow_with_user_timer_direct_api(
         logger.info(f"Workflow completed in {delta.total_seconds() / 3600:.2f} hours")
 
 
-async def test_time_skipping_in_parent_child_workflow_with_user_timer_direct_api(
+async def test_ParentChildWorkflowWithUserTimer_direct_api(
     skipper: TimeSkipper,
 ):
     task_queue = f"tq-parent-child-wf-with-user-timer-{uuid4()}"
@@ -97,7 +100,9 @@ async def test_time_skipping_in_parent_child_workflow_with_user_timer_direct_api
 # --- Scenario 2: Workflow Retry ---
 
 
-async def test_workflow_retry_backoff_direct_api(skipper: TimeSkipper):
+async def test_ThisWorkflowRunsWithCronOrRetry_retry_backoff_direct_api(
+    skipper: TimeSkipper,
+):
     task_queue = f"tq-wf-retry-{uuid4()}"
     calls = []
 
@@ -135,7 +140,7 @@ async def test_workflow_retry_backoff_direct_api(skipper: TimeSkipper):
 # --- Scenario 3: Workflow Execution/Run Timeout ---
 
 
-async def test_workflow_times_out_after_run_timeout_direct_api(
+async def test_WaitForSignalWorkflow_run_timeout_direct_api(
     skipper: TimeSkipper,
 ):
     task_queue = f"tq-run-timeout-{uuid4()}"
@@ -153,7 +158,7 @@ async def test_workflow_times_out_after_run_timeout_direct_api(
     assert isinstance(exc_info.value.cause, TemporalTimeoutError)
 
 
-async def test_workflow_times_out_after_execution_timeout_direct_api(
+async def test_WaitForSignalWorkflow_execution_timeout_direct_api(
     skipper: TimeSkipper,
 ):
     task_queue = f"tq-execution-timeout-{uuid4()}"
@@ -174,7 +179,7 @@ async def test_workflow_times_out_after_execution_timeout_direct_api(
 # --- Scenario 4: Workflow Start Delay ---
 
 
-async def test_workflow_start_delay_direct_api(skipper: TimeSkipper):
+async def test_WorkflowWithStartDelay_direct_api(skipper: TimeSkipper):
     task_queue = f"tq-start-delay-{uuid4()}"
     async with Worker(
         skipper.client, task_queue=task_queue, workflows=[WorkflowWithStartDelay]
@@ -203,7 +208,7 @@ async def retry_activity_mocked() -> int:
         return activity.info().attempt
 
 
-async def test_time_skipping_activity_retry_backoff_direct_api(
+async def test_WorkflowWithActivityRetries_direct_api(
     skipper: TimeSkipper,
 ):
     task_queue = f"tq-retry-{uuid4()}"
@@ -233,7 +238,7 @@ async def test_time_skipping_activity_retry_backoff_direct_api(
 # --- Scenario 6: Cron ---
 
 
-async def test_cron_runs_on_schedule_direct_api(skipper):
+async def test_ThisWorkflowRunsWithCronOrRetry_cron_direct_api(skipper):
     calls = []
 
     @activity.defn(name="dummy_activity")
@@ -267,7 +272,7 @@ async def test_cron_runs_on_schedule_direct_api(skipper):
 # --- Scenario 9: Interactions at controlled virtual times ---
 
 
-async def test_workflow_waiting_for_signals_direct_api(skipper):
+async def test_WorkflowWaitingForSignals_direct_api(skipper):
     task_queue = f"tq-signals-{uuid4()}"
     async with Worker(
         skipper.client, task_queue=task_queue, workflows=[WorkflowWaitingForSignals]
@@ -287,7 +292,7 @@ async def test_workflow_waiting_for_signals_direct_api(skipper):
         assert await handle.result() is True
 
 
-async def test_parent_with_child_and_wait_condition_direct_api(skipper):
+async def test_ParentWithChildAndWaitCondition_direct_api(skipper):
     task_queue = f"tq-parent-{uuid4()}"
     async with Worker(
         skipper.client,
@@ -311,7 +316,7 @@ async def test_parent_with_child_and_wait_condition_direct_api(skipper):
         assert await handle.result() is True
 
 
-async def test_parent_child_both_wait_on_condition_direct_api(skipper):
+async def test_ParentChildBothWaitOnCondition_direct_api(skipper):
     task_queue = f"tq-parent-child-{uuid4()}"
     async with Worker(
         skipper.client,
@@ -339,7 +344,7 @@ async def test_parent_child_both_wait_on_condition_direct_api(skipper):
         assert await handle.result() == (True, True)
 
 
-async def test_fast_forward_from_test_waits_for_pending_workflow_task_direct_api(
+async def test_WaitForSignalWorkflow_pending_workflow_task_direct_api(
     skipper,
 ):
     """V1's extra unlock could break this lock; V2 waits for a worker."""
