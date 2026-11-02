@@ -1,6 +1,10 @@
 {
   "folders": [
     {
+      "name": "Shared Workflows and Docs",
+      "path": "."
+    },
+    {
       "name": "V1 Local Testing Server",
       "path": "v1"
     },

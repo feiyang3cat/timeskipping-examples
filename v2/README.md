@@ -37,28 +37,30 @@ beyond this tested commit.
 
 ## VS Code
 
-Install the Python extension and run `uv sync --locked --directory v2`.
-Copy `v2/.env.example` to `v2/.env` and set `TEMPORAL_CLI_PATH` to the CLI binary
-built above. VS Code reads this file when running tests; the terminal does not
-load it automatically.
+Install the Python extension and open `timeskipping-examples.code-workspace`
+with **File > Open Workspace from File**. The Explorer shows three roots:
 
-Opening the repository folder defaults Test Explorer to V2. Select
-`v2/.venv/bin/python` with **Python: Select Interpreter** if VS Code previously
-selected another environment, then refresh Test Explorer and run the tests.
-Select the executable `v2/.venv/bin/python`, not the `.venv` directory.
-Use the run icon next to a test function or Test Explorer. This workspace also
-configures **Run Python File** to invoke `python -m pytest <file>` so the normal
-run button works for test files. After changing these settings, reload VS Code
-and create a new terminal so the local `.env` is loaded.
+- **Shared Workflows and Docs**: repository root, including the shared
+  `workflow.py`, `activities.py`, and documentation.
+- **V1 Local Testing Server**: V1 tests and interpreter.
+- **V2 Testing Env and Direct API**: V2 tests and interpreter.
+
+Run `uv sync --locked --directory v1` and `uv sync --locked --directory v2`.
+Copy `v2/.env.example` to `v2/.env` and set `TEMPORAL_CLI_PATH` to the CLI binary
+built above. Each test folder has its own pytest configuration; the shared root
+disables test discovery to avoid collecting either suite twice.
+
+Select the executable `v1/.venv/bin/python` or `v2/.venv/bin/python` with
+**Python: Select Interpreter** for the corresponding folder, then refresh Test
+Explorer. Select the executable, not the `.venv` directory.
+Use the run icon next to a test function or Test Explorer. **Run Python File**
+is configured to invoke `python -m pytest <file>` for test files.
+After changing these settings, reload VS Code and create a new terminal so the
+local `.env` is loaded.
 
 When opening the repository folder, you can also open a V2 test file and press
 **F5**, choosing **V2: Run current test file (pytest)**. The launch configuration
 uses the V2 Python executable, pytest configuration, and `v2/.env` explicitly.
-
-To work with both versions, open `timeskipping-examples.code-workspace` with
-**File > Open Workspace from File** and run `uv sync --locked --directory v1`
-as well. Each folder has its own interpreter and pytest configuration, so the
-two `test_workflow.py` modules are collected separately.
 
 ## Two ways to use V2
 
