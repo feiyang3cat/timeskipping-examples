@@ -10,6 +10,7 @@ Time-skipping examples (v1) across supported scenarios:
 
 # Test names deliberately preserve workflow class names for quick lookup,
 # instead of following Python's usual snake_case convention.
+# Suffixes identify the mode: _v1, _v2_env, or _v2_direct.
 
 import asyncio
 import logging
@@ -67,7 +68,7 @@ async def isolated_ts_env():
 
 # --- Scenario 1: User Timers ---
 
-async def test_WorkflowWithUserTimer(ts_env: WorkflowEnvironment):
+async def test_WorkflowWithUserTimer_v1(ts_env: WorkflowEnvironment):
     task_queue = f"tq-wf-with-user-timer-{uuid4()}"
     client = ts_env.client
     worker = Worker(
@@ -89,7 +90,7 @@ async def test_WorkflowWithUserTimer(ts_env: WorkflowEnvironment):
         logger.info(f"Workflow completed in {delta.total_seconds() / 3600:.2f} hours")
 
 
-async def test_ParentChildWorkflowWithUserTimer(
+async def test_ParentChildWorkflowWithUserTimer_v1(
     ts_env: WorkflowEnvironment,
 ):
     task_queue = f"tq-parent-child-wf-with-user-timer-{uuid4()}"
@@ -115,7 +116,7 @@ async def test_ParentChildWorkflowWithUserTimer(
 
 # --- Scenario 2: Workflow Retry ---
 
-async def test_ThisWorkflowRunsWithCronOrRetry_retry_backoff(ts_env: WorkflowEnvironment):
+async def test_ThisWorkflowRunsWithCronOrRetry_retry_backoff_v1(ts_env: WorkflowEnvironment):
     task_queue = f"tq-wf-retry-{uuid4()}"
     calls = []
 
@@ -160,7 +161,7 @@ async def test_ThisWorkflowRunsWithCronOrRetry_retry_backoff(ts_env: WorkflowEnv
 # (Note: handle.describe() would NOT trigger this — it's a one-shot status read,
 # not a "wait for progress" request, so it gives the server no reason to skip.)
 
-async def test_WaitForSignalWorkflow_run_timeout(ts_env: WorkflowEnvironment):
+async def test_WaitForSignalWorkflow_run_timeout_v1(ts_env: WorkflowEnvironment):
     task_queue = f"tq-run-timeout-{uuid4()}"
     async with Worker(ts_env.client, task_queue=task_queue, workflows=[WaitForSignalWorkflow]):
         handle = await ts_env.client.start_workflow(
@@ -175,7 +176,7 @@ async def test_WaitForSignalWorkflow_run_timeout(ts_env: WorkflowEnvironment):
     assert isinstance(exc_info.value.cause, TemporalTimeoutError)
 
 
-async def test_WaitForSignalWorkflow_execution_timeout(ts_env: WorkflowEnvironment):
+async def test_WaitForSignalWorkflow_execution_timeout_v1(ts_env: WorkflowEnvironment):
     task_queue = f"tq-execution-timeout-{uuid4()}"
     async with Worker(ts_env.client, task_queue=task_queue, workflows=[WaitForSignalWorkflow]):
         handle = await ts_env.client.start_workflow(
@@ -192,7 +193,7 @@ async def test_WaitForSignalWorkflow_execution_timeout(ts_env: WorkflowEnvironme
 
 # --- Scenario 4: Workflow Start Delay ---
 
-async def test_WorkflowWithStartDelay(ts_env: WorkflowEnvironment):
+async def test_WorkflowWithStartDelay_v1(ts_env: WorkflowEnvironment):
     task_queue = f"tq-start-delay-{uuid4()}"
     async with Worker(ts_env.client, task_queue=task_queue, workflows=[WorkflowWithStartDelay]):
         time_start = await ts_env.get_current_time()
@@ -217,7 +218,7 @@ async def retry_activity_mocked() -> int:
     else:
         return activity.info().attempt
 
-async def test_WorkflowWithActivityRetries(ts_env: WorkflowEnvironment):
+async def test_WorkflowWithActivityRetries_v1(ts_env: WorkflowEnvironment):
     task_queue = f"tq-retry-{uuid4()}"
     client = ts_env.client
     worker = Worker(
@@ -242,7 +243,7 @@ async def test_WorkflowWithActivityRetries(ts_env: WorkflowEnvironment):
 
 # --- Scenario 6: Cron ---
 
-async def test_ThisWorkflowRunsWithCronOrRetry_cron(ts_env: WorkflowEnvironment):
+async def test_ThisWorkflowRunsWithCronOrRetry_cron_v1(ts_env: WorkflowEnvironment):
     workflow_id = f"cron-wf-{uuid4()}"
     task_queue = f"tq-cron-{uuid4()}"
 
@@ -282,7 +283,7 @@ async def test_ThisWorkflowRunsWithCronOrRetry_cron(ts_env: WorkflowEnvironment)
 # --- Scenario 8: SAA --- (not supported in v1)
 
 # --- Scenario 9: TimeSkipping Sleep ---
-async def test_WorkflowWaitingForSignals(ts_env: WorkflowEnvironment):
+async def test_WorkflowWaitingForSignals_v1(ts_env: WorkflowEnvironment):
     # Simulates a real scenario where signals are sent at different time.
     workflow_id = f"signal-wf-{uuid4()}"
     task_queue = f"tq-signal-{uuid4()}"
@@ -310,7 +311,7 @@ async def test_WorkflowWaitingForSignals(ts_env: WorkflowEnvironment):
 
 
 # --- Scenario 10: Complicated Sleep Scenarios ---
-async def test_ParentWithChildAndWaitCondition(ts_env: WorkflowEnvironment):
+async def test_ParentWithChildAndWaitCondition_v1(ts_env: WorkflowEnvironment):
     # Simulates a review/approval flow: two parallel jobs must finish before a
     # human-approval window opens. ChildA takes 1h, ChildB takes 2h; the parent
     # then waits 1h more (cooldown) and opens a 1h approval window (+3h to +4h).
@@ -341,7 +342,7 @@ async def test_ParentWithChildAndWaitCondition(ts_env: WorkflowEnvironment):
 
 
 
-async def test_ParentChildBothWaitOnCondition(ts_env: WorkflowEnvironment):
+async def test_ParentChildBothWaitOnCondition_v1(ts_env: WorkflowEnvironment):
     # Both parent and child have their own signal windows.
     # The child workflow ID is derived from the parent ID — in production this
     # mirrors looking up the child workflow ID from a DB record and building a
@@ -394,7 +395,7 @@ async def test_ParentChildBothWaitOnCondition(ts_env: WorkflowEnvironment):
 # activity also does a real asyncio.sleep so it stays in flight until the
 # skipped-forward user timer fires and cancels it. As a result the user timer
 # wins the race, and the whole test finishes in milliseconds of real time.
-async def test_WorkflowRacingActivityAndTimer_env_sleep_in_activity(
+async def test_WorkflowRacingActivityAndTimer_env_sleep_in_activity_v1(
     isolated_ts_env: WorkflowEnvironment,
 ):
     ts_env = isolated_ts_env
@@ -441,7 +442,7 @@ async def test_WorkflowRacingActivityAndTimer_env_sleep_in_activity(
 # therefore elapses in real wall-clock time; only the portion after the activity
 # finishes (and releases the lock) is skipped instantly. Here the whole 3s falls
 # inside the 10s in-flight window, so nothing gets skipped.
-async def test_WorkflowRunningLongActivity_env_sleep_from_test(
+async def test_WorkflowRunningLongActivity_env_sleep_from_test_v1(
     ts_env: WorkflowEnvironment,
 ):
     task_queue = f"tq-sleep-vs-activity-{uuid4()}"
@@ -492,7 +493,7 @@ async def test_WorkflowRunningLongActivity_env_sleep_from_test(
 # and the skips ACCUMULATE: the first (+1h) fires the 1h timer, the second
 # (+1h → 2h total) fires the 2h timer, then the activity returns. All three
 # complete in ~2 real seconds, in order: timer1 @1h, timer2 @2h, activity @2h.
-async def test_WorkflowWithTwoTimersAndActivity_two_sleeps_in_activity(
+async def test_WorkflowWithTwoTimersAndActivity_two_sleeps_in_activity_v1(
     ts_env: WorkflowEnvironment,
 ):
     task_queue = f"tq-two-timers-activity-{uuid4()}"
@@ -547,7 +548,7 @@ async def test_WorkflowWithTwoTimersAndActivity_two_sleeps_in_activity(
 #   - timing: result() is already being awaited (otherwise the starting lock is
 #     still held and env.sleep() runs in real time, as in Scenario 9+++), and
 #   - duration: it reaches the next timer; a shorter skip just locks again.
-async def test_WorkflowWithTwoTimersAndActivity_env_sleep_from_test(ts_env: WorkflowEnvironment):
+async def test_WorkflowWithTwoTimersAndActivity_env_sleep_from_test_v1(ts_env: WorkflowEnvironment):
     task_queue = f"tq-outside-sleep-activity-{uuid4()}"
     started = asyncio.Event()
     release = asyncio.Event()
@@ -592,7 +593,7 @@ async def test_WorkflowWithTwoTimersAndActivity_env_sleep_from_test(ts_env: Work
 # A pending workflow task holds a lock too. No worker polls this task queue, so
 # the first workflow task never completes and — unlike Scenario 3 — result()
 # alone cannot skip to the execution timeout. env.sleep() from the test can.
-async def test_WaitForSignalWorkflow_pending_workflow_task(
+async def test_WaitForSignalWorkflow_pending_workflow_task_v1(
     isolated_ts_env: WorkflowEnvironment,
 ):
     ts_env = isolated_ts_env

@@ -2,6 +2,7 @@
 
 # Test names deliberately preserve workflow class names for quick lookup,
 # instead of following Python's usual snake_case convention.
+# Suffixes identify the mode: _v1, _v2_env, or _v2_direct.
 
 import asyncio
 import logging
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 # --- Scenario 1: User Timers ---
 
 
-async def test_WorkflowWithUserTimer_env(
+async def test_WorkflowWithUserTimer_v2_env(
     env: WorkflowEnvironment,
 ):
     task_queue = f"tq-wf-with-user-timer-{uuid4()}"
@@ -62,7 +63,7 @@ async def test_WorkflowWithUserTimer_env(
         logger.info(f"Workflow completed in {delta.total_seconds() / 3600:.2f} hours")
 
 
-async def test_ParentChildWorkflowWithUserTimer_env(
+async def test_ParentChildWorkflowWithUserTimer_v2_env(
     env: WorkflowEnvironment,
 ):
     task_queue = f"tq-parent-child-wf-with-user-timer-{uuid4()}"
@@ -100,7 +101,7 @@ async def test_ParentChildWorkflowWithUserTimer_env(
 # --- Scenario 2: Workflow Retry ---
 
 
-async def test_ThisWorkflowRunsWithCronOrRetry_retry_backoff_env(
+async def test_ThisWorkflowRunsWithCronOrRetry_retry_backoff_v2_env(
     env: WorkflowEnvironment,
 ):
     task_queue = f"tq-wf-retry-{uuid4()}"
@@ -140,7 +141,7 @@ async def test_ThisWorkflowRunsWithCronOrRetry_retry_backoff_env(
 # --- Scenario 3: Workflow Execution/Run Timeout ---
 
 
-async def test_WaitForSignalWorkflow_run_timeout_env(
+async def test_WaitForSignalWorkflow_run_timeout_v2_env(
     env: WorkflowEnvironment,
 ):
     task_queue = f"tq-run-timeout-{uuid4()}"
@@ -158,7 +159,7 @@ async def test_WaitForSignalWorkflow_run_timeout_env(
     assert isinstance(exc_info.value.cause, TemporalTimeoutError)
 
 
-async def test_WaitForSignalWorkflow_execution_timeout_env(
+async def test_WaitForSignalWorkflow_execution_timeout_v2_env(
     env: WorkflowEnvironment,
 ):
     task_queue = f"tq-execution-timeout-{uuid4()}"
@@ -179,7 +180,7 @@ async def test_WaitForSignalWorkflow_execution_timeout_env(
 # --- Scenario 4: Workflow Start Delay ---
 
 
-async def test_WorkflowWithStartDelay_env(env: WorkflowEnvironment):
+async def test_WorkflowWithStartDelay_v2_env(env: WorkflowEnvironment):
     task_queue = f"tq-start-delay-{uuid4()}"
     async with Worker(
         env.client, task_queue=task_queue, workflows=[WorkflowWithStartDelay]
@@ -208,7 +209,7 @@ async def retry_activity_mocked() -> int:
         return activity.info().attempt
 
 
-async def test_WorkflowWithActivityRetries_env(
+async def test_WorkflowWithActivityRetries_v2_env(
     env: WorkflowEnvironment,
 ):
     task_queue = f"tq-retry-{uuid4()}"
@@ -238,7 +239,7 @@ async def test_WorkflowWithActivityRetries_env(
 # --- Scenario 6: Cron ---
 
 
-async def test_ThisWorkflowRunsWithCronOrRetry_cron_env(env):
+async def test_ThisWorkflowRunsWithCronOrRetry_cron_v2_env(env):
     calls = []
 
     @activity.defn(name="dummy_activity")
@@ -272,7 +273,7 @@ async def test_ThisWorkflowRunsWithCronOrRetry_cron_env(env):
 # --- Scenario 9: Interactions at controlled virtual times ---
 
 
-async def test_WorkflowWaitingForSignals_env(env):
+async def test_WorkflowWaitingForSignals_v2_env(env):
     task_queue = f"tq-signals-{uuid4()}"
     async with Worker(
         env.client, task_queue=task_queue, workflows=[WorkflowWaitingForSignals]
@@ -292,7 +293,7 @@ async def test_WorkflowWaitingForSignals_env(env):
         assert await handle.result() is True
 
 
-async def test_ParentWithChildAndWaitCondition_env(env):
+async def test_ParentWithChildAndWaitCondition_v2_env(env):
     task_queue = f"tq-parent-{uuid4()}"
     async with Worker(
         env.client,
@@ -316,7 +317,7 @@ async def test_ParentWithChildAndWaitCondition_env(env):
         assert await handle.result() is True
 
 
-async def test_ParentChildBothWaitOnCondition_env(env):
+async def test_ParentChildBothWaitOnCondition_v2_env(env):
     task_queue = f"tq-parent-child-{uuid4()}"
     async with Worker(
         env.client,
@@ -344,7 +345,7 @@ async def test_ParentChildBothWaitOnCondition_env(env):
         assert await handle.result() == (True, True)
 
 
-async def test_WaitForSignalWorkflow_pending_workflow_task_env(env):
+async def test_WaitForSignalWorkflow_pending_workflow_task_v2_env(env):
     """V1's extra unlock could break this lock; V2 waits for a worker."""
     task_queue = f"tq-no-worker-{uuid4()}"
     with env.with_time_skipping_disabled():

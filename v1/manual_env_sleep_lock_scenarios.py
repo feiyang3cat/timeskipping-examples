@@ -33,6 +33,7 @@ forever and looks exactly like a hang.
 
 # Test names deliberately preserve workflow class names for quick lookup,
 # instead of following Python's usual snake_case convention.
+# Suffixes identify the mode: _v1, _v2_env, or _v2_direct.
 
 import asyncio
 import time
@@ -128,7 +129,7 @@ def _skipping_activity(ts_env: WorkflowEnvironment, skip: timedelta):
 
 # --- Scenario 1: env.sleep() OUTSIDE (from the test), 3 activities in flight ---
 
-async def test_ThreeActivities_env_sleep_from_test(ts_env: WorkflowEnvironment):
+async def test_ThreeActivities_env_sleep_from_test_v1(ts_env: WorkflowEnvironment):
     task_queue = f"tq-outside-{uuid4()}"
     async with Worker(
         ts_env.client,
@@ -161,7 +162,7 @@ async def test_ThreeActivities_env_sleep_from_test(ts_env: WorkflowEnvironment):
 
 # --- Scenario 2: env.sleep() INSIDE 3 activities, generous start_to_close ---
 
-async def test_ThreeActivities_env_sleep_in_activity(ts_env: WorkflowEnvironment):
+async def test_ThreeActivities_env_sleep_in_activity_v1(ts_env: WorkflowEnvironment):
     task_queue = f"tq-inside-ok-{uuid4()}"
     async with Worker(
         ts_env.client,
@@ -186,7 +187,7 @@ async def test_ThreeActivities_env_sleep_in_activity(ts_env: WorkflowEnvironment
 
 # --- Scenario 3: env.sleep() INSIDE 3 activities, skip > start_to_close ---
 
-async def test_ThreeActivities_env_sleep_fires_start_to_close(ts_env: WorkflowEnvironment):
+async def test_ThreeActivities_env_sleep_fires_start_to_close_v1(ts_env: WorkflowEnvironment):
     task_queue = f"tq-inside-timeout-{uuid4()}"
     async with Worker(
         ts_env.client,
@@ -208,7 +209,7 @@ async def test_ThreeActivities_env_sleep_fires_start_to_close(ts_env: WorkflowEn
 
 # --- Scenario 4: env.sleep() INSIDE 3 activities, raced vs a user timer ---
 
-async def test_ThreeActivitiesRacedVsTimer_env_sleep_in_activity(ts_env: WorkflowEnvironment):
+async def test_ThreeActivitiesRacedVsTimer_env_sleep_in_activity_v1(ts_env: WorkflowEnvironment):
     task_queue = f"tq-inside-race-{uuid4()}"
     async with Worker(
         ts_env.client,
